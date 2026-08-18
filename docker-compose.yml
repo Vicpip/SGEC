@@ -1,0 +1,73 @@
+version: "3.9"
+
+services:
+  # ── Base de datos MySQL ───────────────────────────────────────────────
+  db:
+    image: mysql:8.4
+    container_name: sgec_db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+      MYSQL_DATABASE: sgec
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - sgec_db_data:/var/lib/mysql
+      - ./server/db/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
+      - ./server/db/seeds/00_admin.sql:/docker-entrypoint-initdb.d/02_admin.sql
+      - ./server/db/seeds/01_semestre.sql:/docker-entrypoint-initdb.d/03_semestre.sql
+      - ./server/db/seeds/02_profesor.sql:/docker-entrypoint-initdb.d/04_profesor.sql
+      - ./server/db/seeds/03_alumno.sql:/docker-entrypoint-initdb.d/05_alumno.sql
+    networks:
+      - sgec_net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Backend Node.js + Express ─────────────────────────────────────────
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: sgec_server
+    restart: always
+    environment:
+      PORT: 3001
+      NODE_ENV: production
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_NAME: sgec
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN}
+      ALLOWED_EMAIL_DOMAINS: ${ALLOWED_EMAIL_DOMAINS}
+    volumes:
+      - sgec_uploads:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - sgec_net
+
+  # ── Frontend React + Vite (build estático servido por Nginx interno) ──
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL}
+    container_name: sgec_client
+    restart: always
+    networks:
+      - sgec_net
+
+networks:
+  sgec_net:
+    driver: bridge
+
+volumes:
+  sgec_db_data:
+  sgec_uploads:
