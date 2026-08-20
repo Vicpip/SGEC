@@ -125,7 +125,7 @@ export default function ListaEquipos() {
           <Search className="icon-sm" />
           <input className="search-input" placeholder="Buscar equipo o alumno…" />
         </div>
-        <div style={{ display: 'flex', gap: 6 }}>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           <span className="btn btn-primary btn-sm">Todos (8)</span>
           <span className="btn btn-secondary btn-sm">Prácticas (3)</span>
           <span className="btn btn-secondary btn-sm">Tareas (3)</span>

@@ -45,7 +45,7 @@ export default function ListaAlumnos() {
         <select className="select-input" defaultValue="4BM1">
           <option value="4BM1">4BM1</option>
         </select>
-        <div style={{ display: 'flex', gap: 6, marginLeft: 'auto' }}>
+        <div style={{ display: 'flex', gap: 6, marginLeft: 'auto', flexWrap: 'wrap' }}>
           <Badge variant="blue" style={{ padding: '6px 12px' }}>32 alumnos</Badge>
           <Badge variant="green" style={{ padding: '6px 12px' }}>32 en práctica</Badge>
           <Badge variant="navy" style={{ padding: '6px 12px' }}>30 en tarea</Badge>
@@ -101,10 +101,12 @@ export default function ListaAlumnos() {
             color: 'var(--gray-400)',
             display: 'flex',
             justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: 8,
           }}
         >
           <span>Mostrando 5 de 32 alumnos</span>
-          <div style={{ display: 'flex', gap: 6 }}>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             <span className="btn btn-secondary btn-sm">1</span>
             <span className="btn btn-secondary btn-sm">2</span>
             <span className="btn btn-secondary btn-sm">3</span>

@@ -195,7 +195,7 @@ function VistaPorMateria({ actividades, filtroEstatus, navigate }) {
       <div className="accordion-header" onClick={() => setExpandida((v) => !v)}>
         <ChevronRight className={`icon accordion-chevron${expandida ? ' expanded' : ''}`} />
         <span style={{ fontWeight: 600, fontSize: 13.5, color: 'var(--gray-800)' }}>{materia}</span>
-        <div style={{ display: 'flex', gap: 6, marginLeft: 'auto' }}>
+        <div style={{ display: 'flex', gap: 6, marginLeft: 'auto', flexWrap: 'wrap' }}>
           <Badge variant="blue">{actividades.length} actividades</Badge>
           <Badge variant="yellow">{pendientes} pendientes</Badge>
           <Badge variant="green">Promedio: {promedio != null ? promedio.toFixed(1) : '—'}</Badge>
@@ -318,7 +318,7 @@ export default function MisActividades() {
             <Layers className="icon-sm" /> Por materia
           </button>
         </div>
-        <div style={{ display: 'flex', gap: 6, marginLeft: 'auto' }}>
+        <div style={{ display: 'flex', gap: 6, marginLeft: 'auto', flexWrap: 'wrap' }}>
           {TABS_ESTATUS.map((tab) => (
             <button
               key={tab.key}

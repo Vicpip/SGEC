@@ -112,7 +112,7 @@ export default function CrearEquipo() {
                 </button>
               </div>
             ))}
-            <div style={{ marginTop: 20, display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+            <div className="form-actions" style={{ marginTop: 20 }}>
               <button className="btn btn-secondary" onClick={() => navigate('/equipos')}>
                 Cancelar
               </button>

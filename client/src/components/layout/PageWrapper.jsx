@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react'
+import { Menu } from 'lucide-react'
 import Sidebar from './Sidebar'
 import { useAuth } from '../../context/AuthContext'
 
@@ -20,12 +22,27 @@ function iniciales(user) {
 export default function PageWrapper({ title, actions, children }) {
   const { user, rol } = useAuth()
   const semestre = user?.semestre_activo ?? '2026/1'
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+
+  useEffect(() => {
+    document.body.style.overflow = sidebarOpen ? 'hidden' : ''
+    return () => { document.body.style.overflow = '' }
+  }, [sidebarOpen])
 
   return (
     <div className="app">
-      <Sidebar />
+      <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <div className={`sidebar-overlay${sidebarOpen ? ' open' : ''}`} onClick={() => setSidebarOpen(false)} />
       <div className="main">
         <header className="topbar">
+          <button
+            type="button"
+            className="hamburger-btn"
+            aria-label="Abrir menú"
+            onClick={() => setSidebarOpen(true)}
+          >
+            <Menu className="icon" />
+          </button>
           <div className="topbar-title">{title}</div>
           <div className="topbar-right">
             {actions ?? <div className="topbar-semester">{semestre}</div>}

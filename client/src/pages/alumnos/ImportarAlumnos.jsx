@@ -35,7 +35,7 @@ export default function ImportarAlumnos() {
               <FileSpreadsheet style={{ width: 40, height: 40, color: 'var(--blue)' }} />
               <h3>Arrastra tu archivo aquí o haz clic para seleccionar</h3>
               <p>Formatos: .xlsx, .xls &nbsp;·&nbsp; Tamaño máximo: 5 MB</p>
-              <div style={{ marginTop: 16, display: 'flex', gap: 10, justifyContent: 'center' }}>
+              <div style={{ marginTop: 16, display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
                 <span className="btn btn-primary">Seleccionar archivo</span>
                 <span className="btn btn-secondary">Descargar plantilla</span>
               </div>
@@ -105,7 +105,7 @@ export default function ImportarAlumnos() {
               </div>
             </div>
 
-            <div style={{ marginTop: 16, display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+            <div className="form-actions" style={{ marginTop: 16 }}>
               <span className="btn btn-secondary" onClick={() => navigate('/alumnos')}>
                 Cancelar
               </span>

@@ -157,7 +157,7 @@ export default function DashboardProfesor() {
             Ver todos <ArrowRight className="icon-sm" />
           </span>
         </div>
-        <div style={{ padding: '16px 20px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14 }}>
+        <div className="three-col" style={{ padding: '16px 20px' }}>
           {AVISOS_RECIENTES.map((av) => (
             <div key={av.titulo} style={{ background: 'var(--gray-50)', border: '1px solid var(--gray-200)', borderRadius: 12, padding: 14 }}>
               <div className="flex-between mb8">

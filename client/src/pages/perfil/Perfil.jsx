@@ -122,7 +122,7 @@ export default function Perfil() {
             <div style={{ padding: '8px 12px', background: 'var(--blue-light)', borderRadius: 10, fontSize: 12, color: 'var(--blue)', marginBottom: 16 }}>
               Mínimo 8 caracteres, una mayúscula y un número.
             </div>
-            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+            <div className="form-actions">
               <span className="btn btn-secondary">Cancelar</span>
               <span className="btn btn-primary">Actualizar contraseña</span>
             </div>

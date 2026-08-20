@@ -87,10 +87,12 @@ export default function ListaMaterias() {
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: 8,
           }}
         >
           <span>Mostrando 5 de 6 materias</span>
-          <div style={{ display: 'flex', gap: 6 }}>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             <span className="btn btn-secondary btn-sm">Anterior</span>
             <span className="btn btn-primary btn-sm">1</span>
             <span className="btn btn-secondary btn-sm">Siguiente</span>

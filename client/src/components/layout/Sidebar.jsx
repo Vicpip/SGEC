@@ -11,6 +11,7 @@ import {
   Settings,
   Award,
   LogOut,
+  X,
 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 
@@ -67,7 +68,7 @@ function NavItem({ icon: Icon, label, to, match, onNavigate, pathname }) {
   )
 }
 
-export default function Sidebar() {
+export default function Sidebar({ open = false, onClose }) {
   const { user, rol, logout } = useAuth()
   const { pathname } = useLocation()
   const navigate = useNavigate()
@@ -76,8 +77,13 @@ export default function Sidebar() {
   const mostrarReportes = rol === 'Profesor' || rol === 'Administrador'
   const mostrarAdmin = rol === 'Administrador'
 
+  const handleNavigate = (to) => {
+    navigate(to)
+    onClose?.()
+  }
+
   return (
-    <nav className="sidebar">
+    <nav className={`sidebar${open ? ' sidebar-open' : ''}`}>
       <div className="sidebar-logo">
         <div className="logo-row">
           <div className="logo-mark">SC</div>
@@ -86,27 +92,30 @@ export default function Sidebar() {
             <small>ESCOM · IPN</small>
           </div>
         </div>
+        <button type="button" className="sidebar-close-btn" aria-label="Cerrar menú" onClick={onClose}>
+          <X className="icon" />
+        </button>
       </div>
 
       <div className="sidebar-section">
         <div className="sbl">Principal</div>
         {items.map(({ key, ...item }) => (
-          <NavItem key={key} {...item} onNavigate={navigate} pathname={pathname} />
+          <NavItem key={key} {...item} onNavigate={handleNavigate} pathname={pathname} />
         ))}
       </div>
 
       {mostrarReportes && (
         <div className="sidebar-section">
           <div className="sbl">Reportes</div>
-          <NavItem icon={BarChart2} label="Reportes" to="/reportes" onNavigate={navigate} pathname={pathname} />
+          <NavItem icon={BarChart2} label="Reportes" to="/reportes" onNavigate={handleNavigate} pathname={pathname} />
         </div>
       )}
 
       {mostrarAdmin && (
         <div className="sidebar-section">
           <div className="sbl">Administración</div>
-          <NavItem icon={UserCog} label="Profesores" to="/admin/profesores" onNavigate={navigate} pathname={pathname} />
-          <NavItem icon={Settings} label="Configuración" to="/admin/configuracion" onNavigate={navigate} pathname={pathname} />
+          <NavItem icon={UserCog} label="Profesores" to="/admin/profesores" onNavigate={handleNavigate} pathname={pathname} />
+          <NavItem icon={Settings} label="Configuración" to="/admin/configuracion" onNavigate={handleNavigate} pathname={pathname} />
         </div>
       )}
 
@@ -116,8 +125,8 @@ export default function Sidebar() {
           role="button"
           tabIndex={0}
           style={{ cursor: 'pointer' }}
-          onClick={() => navigate('/perfil')}
-          onKeyDown={(e) => e.key === 'Enter' && navigate('/perfil')}
+          onClick={() => handleNavigate('/perfil')}
+          onKeyDown={(e) => e.key === 'Enter' && handleNavigate('/perfil')}
         >
           <div className="avatar-sm" style={AVATAR_BG_POR_ROL[rol] ? { background: AVATAR_BG_POR_ROL[rol] } : undefined}>
             {iniciales(user)}

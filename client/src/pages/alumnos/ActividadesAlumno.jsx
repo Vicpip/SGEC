@@ -31,13 +31,13 @@ export default function ActividadesAlumno() {
       }
     >
       <div className="card mb20" style={{ overflow: 'hidden' }}>
-        <div style={{ background: 'linear-gradient(135deg,var(--navy) 0%,var(--blue) 100%)', padding: '18px 24px', display: 'flex', alignItems: 'center', gap: 16 }}>
+        <div style={{ background: 'linear-gradient(135deg,var(--navy) 0%,var(--blue) 100%)', padding: '18px 24px', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
           <Avatar size="lg" initials="SR" style={{ width: 56, height: 56, fontSize: 20 }} />
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 17, fontWeight: 700, color: 'white' }}>Sofía Valentina Ramírez Torres</div>
             <div style={{ fontSize: 12, color: 'rgba(255,255,255,.65)' }}>Boleta: 2023630045 · Grupo 4BM1 · 2026/1</div>
           </div>
-          <div style={{ display: 'flex', gap: 20, textAlign: 'center' }}>
+          <div style={{ display: 'flex', gap: 20, textAlign: 'center', flexWrap: 'wrap' }}>
             <div>
               <div style={{ fontSize: 22, fontWeight: 700, color: 'white' }}>9.1</div>
               <div style={{ fontSize: 11, color: 'rgba(255,255,255,.6)' }}>Promedio</div>
@@ -48,7 +48,7 @@ export default function ActividadesAlumno() {
             </div>
           </div>
         </div>
-        <div style={{ padding: '14px 24px', background: 'white', display: 'flex', gap: 20, fontSize: 13 }}>
+        <div style={{ padding: '14px 24px', background: 'white', display: 'flex', gap: 20, fontSize: 13, flexWrap: 'wrap' }}>
           <span>
             <strong style={{ color: 'var(--navy)' }}>Materia:</strong> Teoría de la Computación
           </span>

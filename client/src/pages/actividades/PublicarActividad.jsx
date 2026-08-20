@@ -229,7 +229,7 @@ export default function PublicarActividad() {
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+          <div className="form-actions">
             <button className="btn btn-secondary">
               <Clock className="icon-sm" />
               Programar publicación

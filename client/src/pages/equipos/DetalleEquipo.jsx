@@ -60,6 +60,8 @@ export default function DetalleEquipo() {
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: 16,
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
@@ -84,7 +86,7 @@ export default function DetalleEquipo() {
               <div style={{ fontSize: 12, color: 'rgba(255,255,255,.6)' }}>Teoría de la Computación · 4BM1 · 2026/1</div>
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 16, textAlign: 'center' }}>
+          <div style={{ display: 'flex', gap: 16, textAlign: 'center', flexWrap: 'wrap' }}>
             <div>
               <div style={{ fontSize: 22, fontWeight: 700, color: 'white' }}>8.7</div>
               <div style={{ fontSize: 11, color: 'rgba(255,255,255,.6)' }}>Promedio</div>
@@ -198,13 +200,11 @@ export default function DetalleEquipo() {
           </table>
         </div>
         <div
+          className="form-actions"
           style={{
             padding: '12px 20px',
             background: 'var(--blue-light)',
             borderTop: '1px solid var(--gray-200)',
-            display: 'flex',
-            justifyContent: 'flex-end',
-            gap: 10,
           }}
         >
           <span className="btn btn-secondary btn-sm">Descartar</span>

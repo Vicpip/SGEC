@@ -58,7 +58,7 @@ export default function GeneradorReportes() {
               </select>
             </div>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <div className="form-actions">
             <button className="btn btn-primary">
               <BarChart2 className="icon-sm" />
               Generar reporte
