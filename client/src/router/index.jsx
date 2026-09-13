@@ -24,6 +24,7 @@ import GeneradorReportes from '../pages/reportes/GeneradorReportes'
 import TablonProfesor from '../pages/tablon/TablonProfesor'
 import TablonAlumno from '../pages/tablon/TablonAlumno'
 import GestionProfesores from '../pages/admin/GestionProfesores'
+import GestionSemestres from '../pages/admin/GestionSemestres'
 import Configuracion from '../pages/admin/Configuracion'
 import MisEquipos from '../pages/alumno/MisEquipos'
 import MisActividades from '../pages/alumno/MisActividades'
@@ -128,6 +129,10 @@ export default function AppRouter() {
       <Route
         path="/admin/profesores"
         element={<ProtectedRoute roles={['Administrador']}><GestionProfesores /></ProtectedRoute>}
+      />
+      <Route
+        path="/admin/semestres"
+        element={<ProtectedRoute roles={['Administrador']}><GestionSemestres /></ProtectedRoute>}
       />
       <Route
         path="/admin/configuracion"

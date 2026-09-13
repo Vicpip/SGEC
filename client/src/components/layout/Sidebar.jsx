@@ -10,6 +10,7 @@ import {
   UserCog,
   Settings,
   Award,
+  CalendarRange,
   LogOut,
   X,
 } from 'lucide-react'
@@ -35,6 +36,12 @@ const ALUMNO_ITEMS = [
   { key: 'calificaciones', icon: Award, label: 'Mis Calificaciones', to: '/alumno/calificaciones' },
   { key: 'tablon', icon: Megaphone, label: 'Tablón de Avisos', to: '/alumno/tablon' },
 ]
+
+// El Administrador no gestiona equipos/alumnos/actividades/avisos de una materia
+// específica (eso es de Profesor) — solo ve el catálogo de materias a nivel
+// institucional; sus acciones propias (Profesores, Semestres, Configuración)
+// viven en la sección "Administración" más abajo.
+const ADMIN_ITEMS = [{ key: 'materias', icon: BookOpen, label: 'Materias', to: '/materias' }]
 
 const AVATAR_BG_POR_ROL = {
   Alumno: '#27AE60',
@@ -73,8 +80,10 @@ export default function Sidebar({ open = false, onClose }) {
   const { pathname } = useLocation()
   const navigate = useNavigate()
 
-  const items = rol === 'Alumno' ? ALUMNO_ITEMS : PROFESOR_ITEMS
-  const mostrarReportes = rol === 'Profesor' || rol === 'Administrador'
+  const items = rol === 'Alumno' ? ALUMNO_ITEMS : rol === 'Administrador' ? ADMIN_ITEMS : PROFESOR_ITEMS
+  // Reportes (Pantalla 14) es exclusivo de Profesor — el router no lo habilita para
+  // Administrador, así que tampoco se anuncia aquí (evita un link que redirige solo).
+  const mostrarReportes = rol === 'Profesor'
   const mostrarAdmin = rol === 'Administrador'
 
   const handleNavigate = (to) => {
@@ -115,6 +124,7 @@ export default function Sidebar({ open = false, onClose }) {
         <div className="sidebar-section">
           <div className="sbl">Administración</div>
           <NavItem icon={UserCog} label="Profesores" to="/admin/profesores" onNavigate={handleNavigate} pathname={pathname} />
+          <NavItem icon={CalendarRange} label="Semestres" to="/admin/semestres" onNavigate={handleNavigate} pathname={pathname} />
           <NavItem icon={Settings} label="Configuración" to="/admin/configuracion" onNavigate={handleNavigate} pathname={pathname} />
         </div>
       )}

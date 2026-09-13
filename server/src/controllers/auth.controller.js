@@ -10,48 +10,17 @@ const jwt = require('jsonwebtoken')
 const pool = require('../config/db')
 const { validateEnv } = require('../config/env')
 const { enviarCorreoRecuperacion } = require('../services/email.service')
+const { dominiosPermitidosPorRol, dominioValido } = require('../utils/correoInstitucional')
+const { obtenerDatosExtendidos } = require('../services/usuarios.service')
 
 const env = validateEnv()
 const RONDAS_BCRYPT = 10
 const RESET_TOKEN_VIGENCIA_MS = 60 * 60 * 1000 // 1 hora
 
-function dominiosPermitidosPorRol(rol) {
-  const dominios = env.allowedEmailDomains
-  return rol === 'Alumno'
-    ? dominios.filter((d) => d.startsWith('alumno.'))
-    : dominios.filter((d) => !d.startsWith('alumno.'))
-}
-
-function dominioValido(correo, rol) {
-  const dominiosPermitidos = dominiosPermitidosPorRol(rol)
-  const correoLower = correo.toLowerCase()
-  return dominiosPermitidos.some((dominio) => correoLower.endsWith(`@${dominio}`))
-}
-
 function generarTokenReset() {
   const tokenPlano = crypto.randomBytes(32).toString('hex')
   const tokenHash = crypto.createHash('sha256').update(tokenPlano).digest('hex')
   return { tokenPlano, tokenHash }
-}
-
-async function obtenerDatosExtendidos(usuario) {
-  if (usuario.rol === 'Profesor') {
-    const [rows] = await pool.query(
-      'SELECT id_profesor, no_empleado, departamento FROM profesor WHERE id_usuario = ?',
-      [usuario.id_usuario]
-    )
-    return rows[0] || {}
-  }
-
-  if (usuario.rol === 'Alumno') {
-    const [rows] = await pool.query(
-      'SELECT id_alumno, boleta, grupo, carrera FROM alumno WHERE id_usuario = ?',
-      [usuario.id_usuario]
-    )
-    return rows[0] || {}
-  }
-
-  return {}
 }
 
 async function login(req, res) {
