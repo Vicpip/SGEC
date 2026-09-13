@@ -265,7 +265,7 @@ solo íconos `lucide-react`. Tarjetas con sombra suave (`--shadow`) y `border-ra
 |--------|------|--------|--------|
 | S1 | Seguridad base + Auth completo | ✅ Completa | cd3f6f2 |
 | S2 | Semestres + Gestión de Usuarios/Profesores + Sidebar Admin | ✅ Completa | ec5a5e8 |
-| S3 | Seeds completos | ⏳ Pendiente | — |
+| S3 | Seeds completos | ✅ Completa | 0cfe125 |
 | S4 | Materias | ⏳ Pendiente | — |
 | S5 | Alumnos + importación Excel | ⏳ Pendiente | — |
 | S6 | Equipos + asignación aleatoria masiva | ⏳ Pendiente | — |
