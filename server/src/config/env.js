@@ -38,6 +38,9 @@ function validateEnv() {
     uploadDir: process.env.UPLOAD_DIR,
     maxFileSizeMb: Number(process.env.MAX_FILE_SIZE_MB),
     allowedEmailDomains: process.env.ALLOWED_EMAIL_DOMAINS.split(',').map((d) => d.trim()),
+    // Origen del frontend, usado para restringir CORS y para armar enlaces de
+    // recuperación de contraseña. Opcional: cae a la URL de desarrollo de Vite.
+    clientUrl: process.env.CLIENT_URL || 'http://localhost:5173',
   }
 }
 

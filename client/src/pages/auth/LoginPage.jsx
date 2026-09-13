@@ -4,10 +4,10 @@
 // Descripción: Autenticación con correo institucional (@ipn.mx / @alumno.ipn.mx) y JWT, selección de rol.
 
 import { useState } from 'react'
-import { Navigate } from 'react-router-dom'
+import { Navigate, Link } from 'react-router-dom'
 import { Mail, Lock, Eye, EyeOff, UserCog, GraduationCap, Loader2 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
-import api from '../../services/api'
+import * as authService from '../../services/auth.service'
 import { rutaDashboardPorRol } from '../../utils/roleRoutes'
 
 export default function LoginPage() {
@@ -41,7 +41,7 @@ export default function LoginPage() {
 
     setLoading(true)
     try {
-      const { data } = await api.post('/auth/login', {
+      const data = await authService.login({
         correo_institucional: correo,
         contrasena,
         rol,
@@ -170,9 +170,9 @@ export default function LoginPage() {
 
           {error && <div className="login-error">{error}</div>}
 
-          <a href="#" className="login-forgot">
+          <Link to="/recuperar-password" className="login-forgot">
             ¿Olvidaste tu contraseña?
-          </a>
+          </Link>
         </form>
 
         <div className="login-footer">

@@ -1,24 +1,37 @@
 // Controlador de autenticación.
-// Login valida el dominio del correo institucional según el rol
-// (Administrador/Profesor -> @ipn.mx, Alumno -> @alumno.ipn.mx),
-// compara la contraseña con bcrypt y firma un JWT.
+// Login valida el dominio del correo institucional según el rol contra
+// ALLOWED_EMAIL_DOMAINS (Alumno -> dominio "alumno.*"; Profesor/Administrador
+// -> cualquier otro dominio permitido), compara la contraseña con bcrypt y
+// firma un JWT. También expone recuperación y cambio de contraseña.
 
+const crypto = require('crypto')
 const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken')
 const pool = require('../config/db')
 const { validateEnv } = require('../config/env')
+const { enviarCorreoRecuperacion } = require('../services/email.service')
 
 const env = validateEnv()
+const RONDAS_BCRYPT = 10
+const RESET_TOKEN_VIGENCIA_MS = 60 * 60 * 1000 // 1 hora
 
-const DOMINIOS_POR_ROL = {
-  Administrador: '@ipn.mx',
-  Profesor: '@ipn.mx',
-  Alumno: '@alumno.ipn.mx',
+function dominiosPermitidosPorRol(rol) {
+  const dominios = env.allowedEmailDomains
+  return rol === 'Alumno'
+    ? dominios.filter((d) => d.startsWith('alumno.'))
+    : dominios.filter((d) => !d.startsWith('alumno.'))
 }
 
 function dominioValido(correo, rol) {
-  const dominio = DOMINIOS_POR_ROL[rol]
-  return Boolean(dominio) && correo.toLowerCase().endsWith(dominio)
+  const dominiosPermitidos = dominiosPermitidosPorRol(rol)
+  const correoLower = correo.toLowerCase()
+  return dominiosPermitidos.some((dominio) => correoLower.endsWith(`@${dominio}`))
+}
+
+function generarTokenReset() {
+  const tokenPlano = crypto.randomBytes(32).toString('hex')
+  const tokenHash = crypto.createHash('sha256').update(tokenPlano).digest('hex')
+  return { tokenPlano, tokenHash }
 }
 
 async function obtenerDatosExtendidos(usuario) {
@@ -49,8 +62,9 @@ async function login(req, res) {
   }
 
   if (!dominioValido(correo_institucional, rol)) {
+    const dominiosPermitidos = dominiosPermitidosPorRol(rol)
     return res.status(400).json({
-      error: `El correo debe pertenecer al dominio ${DOMINIOS_POR_ROL[rol] || 'institucional'} para el rol ${rol}`,
+      error: `El correo debe pertenecer a uno de estos dominios para el rol ${rol}: ${dominiosPermitidos.join(', ')}`,
     })
   }
 
@@ -120,4 +134,74 @@ async function logout(req, res) {
   res.status(200).json({ message: 'Sesión cerrada' })
 }
 
-module.exports = { login, me, logout }
+async function forgotPassword(req, res) {
+  const { correo_institucional } = req.body
+
+  const [rows] = await pool.query(
+    'SELECT id_usuario, activo FROM usuario WHERE correo_institucional = ?',
+    [correo_institucional]
+  )
+  const usuario = rows[0]
+
+  if (usuario && usuario.activo) {
+    const { tokenPlano, tokenHash } = generarTokenReset()
+    const expira = new Date(Date.now() + RESET_TOKEN_VIGENCIA_MS)
+
+    await pool.query(
+      'UPDATE usuario SET reset_token_hash = ?, reset_token_expira = ? WHERE id_usuario = ?',
+      [tokenHash, expira, usuario.id_usuario]
+    )
+    await enviarCorreoRecuperacion(correo_institucional, tokenPlano)
+  }
+
+  // Respuesta genérica siempre, sin importar si el correo existe o la cuenta
+  // está activa, para no revelar información de cuentas a un atacante.
+  res.status(200).json({ message: 'Si el correo existe, se enviaron instrucciones de recuperación' })
+}
+
+async function resetPassword(req, res) {
+  const { token, nueva_contrasena } = req.body
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex')
+
+  const [rows] = await pool.query(
+    'SELECT id_usuario, reset_token_expira FROM usuario WHERE reset_token_hash = ?',
+    [tokenHash]
+  )
+  const usuario = rows[0]
+
+  if (!usuario || new Date(usuario.reset_token_expira) < new Date()) {
+    return res.status(400).json({ error: 'El enlace de recuperación es inválido o expiró' })
+  }
+
+  const nuevoHash = await bcrypt.hash(nueva_contrasena, RONDAS_BCRYPT)
+  await pool.query(
+    'UPDATE usuario SET contrasena_hash = ?, reset_token_hash = NULL, reset_token_expira = NULL WHERE id_usuario = ?',
+    [nuevoHash, usuario.id_usuario]
+  )
+
+  res.status(200).json({ message: 'Contraseña actualizada correctamente' })
+}
+
+async function changePassword(req, res) {
+  const { contrasena_actual, nueva_contrasena } = req.body
+
+  const [rows] = await pool.query('SELECT contrasena_hash FROM usuario WHERE id_usuario = ?', [
+    req.user.id_usuario,
+  ])
+  const usuario = rows[0]
+
+  const contrasenaValida = await bcrypt.compare(contrasena_actual, usuario.contrasena_hash)
+  if (!contrasenaValida) {
+    return res.status(401).json({ error: 'La contraseña actual es incorrecta' })
+  }
+
+  const nuevoHash = await bcrypt.hash(nueva_contrasena, RONDAS_BCRYPT)
+  await pool.query('UPDATE usuario SET contrasena_hash = ? WHERE id_usuario = ?', [
+    nuevoHash,
+    req.user.id_usuario,
+  ])
+
+  res.status(200).json({ message: 'Contraseña actualizada correctamente' })
+}
+
+module.exports = { login, me, logout, forgotPassword, resetPassword, changePassword }

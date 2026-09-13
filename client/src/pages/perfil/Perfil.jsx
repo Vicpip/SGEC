@@ -4,12 +4,15 @@
 // Descripción: Datos personales de solo lectura, edición de foto y cambio de contraseña.
 
 import { useState } from 'react'
-import { Camera, Pencil, Lock, Eye, EyeOff } from 'lucide-react'
+import { Camera, Pencil, Lock, Eye, EyeOff, Loader2 } from 'lucide-react'
 import PageWrapper from '../../components/layout/PageWrapper'
 import Badge from '../../components/ui/Badge'
 import Avatar from '../../components/ui/Avatar'
+import * as authService from '../../services/auth.service'
 
-function PasswordField({ id, label, focused }) {
+const REGLA_CONTRASENA = /^(?=.*[A-Z])(?=.*[0-9]).{8,}$/
+
+function PasswordField({ id, label, value, onChange, focused }) {
   const [visible, setVisible] = useState(false)
 
   return (
@@ -19,7 +22,13 @@ function PasswordField({ id, label, focused }) {
       </label>
       <div className={`form-control login-input-wrap${focused ? ' focused' : ''}`}>
         <Lock className="icon" style={{ color: 'var(--gray-400)' }} />
-        <input id={id} type={visible ? 'text' : 'password'} defaultValue="12345678" style={{ color: 'var(--gray-400)', letterSpacing: 3 }} />
+        <input
+          id={id}
+          type={visible ? 'text' : 'password'}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          style={{ color: 'var(--gray-800)', letterSpacing: 3 }}
+        />
         <button
           type="button"
           className="login-toggle-pw"
@@ -30,6 +39,90 @@ function PasswordField({ id, label, focused }) {
         </button>
       </div>
     </div>
+  )
+}
+
+function CambiarContrasena() {
+  const [actual, setActual] = useState('')
+  const [nueva, setNueva] = useState('')
+  const [confirmar, setConfirmar] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [exito, setExito] = useState('')
+
+  function limpiar() {
+    setActual('')
+    setNueva('')
+    setConfirmar('')
+    setError('')
+    setExito('')
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    setError('')
+    setExito('')
+
+    if (!actual || !nueva || !confirmar) {
+      setError('Completa los tres campos')
+      return
+    }
+    if (!REGLA_CONTRASENA.test(nueva)) {
+      setError('La nueva contraseña debe tener al menos 8 caracteres, una mayúscula y un número')
+      return
+    }
+    if (nueva !== confirmar) {
+      setError('Las contraseñas no coinciden')
+      return
+    }
+
+    setLoading(true)
+    try {
+      await authService.cambiarContrasena(actual, nueva)
+      setActual('')
+      setNueva('')
+      setConfirmar('')
+      setExito('Contraseña actualizada correctamente')
+    } catch (err) {
+      setError(err.response?.data?.error || 'No se pudo actualizar la contraseña')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <form className="card" onSubmit={handleSubmit}>
+      <div className="card-header">
+        <span className="card-title">Cambiar contraseña</span>
+      </div>
+      <div className="card-body">
+        <div className="form-row">
+          <PasswordField id="pw-actual" label="Contraseña actual" value={actual} onChange={setActual} />
+          <div />
+        </div>
+        <div className="form-row">
+          <PasswordField id="pw-nueva" label="Nueva contraseña" value={nueva} onChange={setNueva} focused />
+          <PasswordField id="pw-confirmar" label="Confirmar contraseña" value={confirmar} onChange={setConfirmar} />
+        </div>
+        <div style={{ padding: '8px 12px', background: 'var(--blue-light)', borderRadius: 10, fontSize: 12, color: 'var(--blue)', marginBottom: 16 }}>
+          Mínimo 8 caracteres, una mayúscula y un número.
+        </div>
+        {error && <div className="login-error" style={{ marginBottom: 16 }}>{error}</div>}
+        {exito && (
+          <div style={{ padding: '8px 12px', background: 'var(--blue-light)', borderRadius: 10, fontSize: 12, color: 'var(--green)', marginBottom: 16 }}>
+            {exito}
+          </div>
+        )}
+        <div className="form-actions">
+          <button type="button" className="btn btn-secondary" onClick={limpiar} disabled={loading}>
+            Cancelar
+          </button>
+          <button type="submit" className="btn btn-primary" disabled={loading}>
+            {loading ? <Loader2 className="icon-sm spin" /> : 'Actualizar contraseña'}
+          </button>
+        </div>
+      </div>
+    </form>
   )
 }
 
@@ -106,28 +199,7 @@ export default function Perfil() {
           </div>
         </div>
 
-        <div className="card">
-          <div className="card-header">
-            <span className="card-title">Cambiar contraseña</span>
-          </div>
-          <div className="card-body">
-            <div className="form-row">
-              <PasswordField id="pw-actual" label="Contraseña actual" />
-              <div />
-            </div>
-            <div className="form-row">
-              <PasswordField id="pw-nueva" label="Nueva contraseña" focused />
-              <PasswordField id="pw-confirmar" label="Confirmar contraseña" />
-            </div>
-            <div style={{ padding: '8px 12px', background: 'var(--blue-light)', borderRadius: 10, fontSize: 12, color: 'var(--blue)', marginBottom: 16 }}>
-              Mínimo 8 caracteres, una mayúscula y un número.
-            </div>
-            <div className="form-actions">
-              <span className="btn btn-secondary">Cancelar</span>
-              <span className="btn btn-primary">Actualizar contraseña</span>
-            </div>
-          </div>
-        </div>
+        <CambiarContrasena />
       </div>
     </PageWrapper>
   )

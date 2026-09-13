@@ -4,6 +4,8 @@ import { useAuth } from '../context/AuthContext'
 import { rutaDashboardPorRol } from '../utils/roleRoutes'
 
 import LoginPage from '../pages/auth/LoginPage'
+import RecuperarContrasena from '../pages/auth/RecuperarContrasena'
+import RestablecerContrasena from '../pages/auth/RestablecerContrasena'
 import DashboardProfesor from '../pages/dashboard/DashboardProfesor'
 import DashboardAlumno from '../pages/dashboard/DashboardAlumno'
 import ListaMaterias from '../pages/materias/ListaMaterias'
@@ -64,6 +66,8 @@ export default function AppRouter() {
   return (
     <Routes>
       <Route path="/login" element={loading ? <FullScreenSpinner /> : <LoginPage />} />
+      <Route path="/recuperar-password" element={<RecuperarContrasena />} />
+      <Route path="/restablecer-password" element={<RestablecerContrasena />} />
 
       <Route
         path="/dashboard"

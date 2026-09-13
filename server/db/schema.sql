@@ -30,7 +30,9 @@ CREATE TABLE usuario (
   fecha_creacion        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   fecha_actualizacion   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   correo_alterno        VARCHAR(150) NULL,
-  notificaciones_email  BOOLEAN NOT NULL DEFAULT TRUE
+  notificaciones_email  BOOLEAN NOT NULL DEFAULT TRUE,
+  reset_token_hash      VARCHAR(255) NULL,
+  reset_token_expira    DATETIME NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ── 2. profesor ──────────────────────────────────────────────────────────
