@@ -7,7 +7,19 @@ const mysql = require('mysql2/promise')
 
 require('dotenv').config({ path: path.join(__dirname, '..', '..', '.env') })
 
-const SEED_FILES = ['00_admin.sql', '01_semestre.sql', '02_profesor.sql', '03_alumno.sql']
+const SEED_FILES = [
+  '00_admin.sql',
+  '01_semestre.sql',
+  '02_profesor.sql',
+  '03_alumno.sql',
+  '04_materia.sql',
+  '05_alumnos_extra.sql',
+  '06_equipos.sql',
+  '07_actividades.sql',
+  '08_entregas.sql',
+  '09_calificaciones.sql',
+  '10_avisos.sql',
+]
 
 async function runSeeds() {
   const connection = await mysql.createConnection({
