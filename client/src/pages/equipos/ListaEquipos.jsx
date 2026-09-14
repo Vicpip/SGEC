@@ -3,188 +3,261 @@
 // URL: /equipos?materia=:clave
 // Descripción: Muestra todos los equipos de una materia. Filtra por tipo.
 
-import { useNavigate } from 'react-router-dom'
-import { Search, Plus, ArrowRight } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { Search, Plus, ArrowRight, Shuffle, Users, Loader2 } from 'lucide-react'
 import PageWrapper from '../../components/layout/PageWrapper'
 import Badge from '../../components/ui/Badge'
 import Avatar from '../../components/ui/Avatar'
-import ProgressBar from '../../components/ui/ProgressBar'
+import ActionButtons from '../../components/ui/ActionButtons'
+import EmptyState from '../../components/ui/EmptyState'
+import * as equiposService from '../../services/equipos.service'
+import * as materiasService from '../../services/materias.service'
 
-const EQUIPOS = [
-  {
-    id: 1,
-    nombre: 'Equipo Alfa',
-    materia: 'Teoría de la Computación',
-    tipo: 'Práctica',
-    tipoVariant: 'blue',
-    miembros: [
-      { iniciales: 'SR', nombre: 'Sofía Ramírez Torres' },
-      { iniciales: 'JL', nombre: 'Jorge López Mendoza', bg: '#27AE60' },
-      { iniciales: 'AM', nombre: 'Ana Martínez Soto', bg: '#E07B2A' },
-    ],
-    completadas: 4,
-    total: 6,
-    porcentaje: 67,
-    promedio: 8.7,
-    promedioVariant: 'green',
-  },
-  {
-    id: 2,
-    nombre: 'Equipo Beta',
-    materia: 'Teoría de la Computación',
-    tipo: 'Práctica',
-    tipoVariant: 'blue',
-    miembros: [
-      { iniciales: 'PH', nombre: 'Pablo Hernández Cruz', bg: '#8E44AD' },
-      { iniciales: 'LC', nombre: 'Lucía Castillo Vera', bg: '#2980B9' },
-      { iniciales: 'DN', nombre: 'Diego Navarro Ríos', bg: '#16A085' },
-    ],
-    completadas: 5,
-    total: 6,
-    porcentaje: 83,
-    promedio: 9.1,
-    promedioVariant: 'green',
-  },
-  {
-    id: 3,
-    nombre: 'Equipo Gamma',
-    materia: 'Teoría de la Computación',
-    tipo: 'Tarea',
-    tipoVariant: 'navy',
-    miembros: [
-      { iniciales: 'VF', nombre: 'Valeria Flores G.', bg: '#C0392B' },
-      { iniciales: 'RM', nombre: 'Ricardo Morales J.', bg: '#D35400' },
-      { iniciales: 'KP', nombre: 'Karen Pérez S.', bg: '#1ABC9C' },
-    ],
-    completadas: 2,
-    total: 4,
-    porcentaje: 50,
-    progressColor: 'var(--yellow)',
-    promedio: 7.5,
-    promedioVariant: 'yellow',
-  },
-  {
-    id: 4,
-    nombre: 'Equipo Delta',
-    materia: 'Teoría de la Computación',
-    tipo: 'Tarea',
-    tipoVariant: 'navy',
-    miembros: [
-      { iniciales: 'ES', nombre: 'Eduardo Salinas R.' },
-      { iniciales: 'MO', nombre: 'Mariana Ortiz B.', bg: '#E74C3C' },
-      { iniciales: 'FA', nombre: 'Fernanda Aguilar T.', bg: '#2ECC71' },
-    ],
-    completadas: 3,
-    total: 4,
-    porcentaje: 75,
-    promedio: 8.3,
-    promedioVariant: 'green',
-  },
-  {
-    id: 5,
-    nombre: 'Proyecto Sigma',
-    materia: 'Teoría de la Computación',
-    tipo: 'Proyecto',
-    tipoVariant: 'orange',
-    miembros: [
-      { iniciales: 'SR', nombre: 'Sofía Ramírez Torres' },
-      { iniciales: 'PH', nombre: 'Pablo Hernández Cruz', bg: '#8E44AD' },
-      { iniciales: 'VF', nombre: 'Valeria Flores G.', bg: '#C0392B' },
-    ],
-    completadas: 1,
-    total: 3,
-    porcentaje: 33,
-    progressColor: 'var(--orange)',
-    promedio: 7.0,
-    promedioVariant: 'orange',
-  },
-]
+const TIPO_VARIANT = { Practica: 'blue', Tarea: 'navy', Proyecto: 'orange' }
+const TIPO_LABEL = { Practica: 'Práctica', Tarea: 'Tarea', Proyecto: 'Proyecto' }
+const TIPOS = ['Practica', 'Tarea', 'Proyecto']
+
+function iniciales(integrante) {
+  return `${integrante.nombre?.[0] ?? ''}${integrante.apellido_paterno?.[0] ?? ''}`.toUpperCase()
+}
 
 export default function ListaEquipos() {
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const claveMateria = searchParams.get('materia') ?? ''
+
+  const [materias, setMaterias] = useState([])
+  const [materia, setMateria] = useState(null)
+  const [equipos, setEquipos] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [busqueda, setBusqueda] = useState('')
+  const [filtroTipo, setFiltroTipo] = useState('todos')
+  const [tipoGenerar, setTipoGenerar] = useState('Practica')
+  const [generando, setGenerando] = useState(false)
+  const [avisoGenerar, setAvisoGenerar] = useState(null)
+
+  useEffect(() => {
+    materiasService
+      .listarMaterias()
+      .then((data) => {
+        setMaterias(data)
+        if (!claveMateria && data[0]) {
+          setSearchParams({ materia: data[0].clave }, { replace: true })
+        }
+      })
+      .catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  function cargarEquipos() {
+    if (!claveMateria) return
+    setLoading(true)
+    equiposService
+      .listarEquipos(claveMateria)
+      .then((data) => {
+        setEquipos(data.equipos)
+        setMateria(data.materia)
+        setError('')
+      })
+      .catch((err) => {
+        setError(err.response?.data?.error || 'No se pudieron cargar los equipos')
+        setEquipos([])
+        setMateria(null)
+      })
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => {
+    cargarEquipos()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [claveMateria])
+
+  function handleCambioMateria(e) {
+    setSearchParams({ materia: e.target.value })
+    setAvisoGenerar(null)
+  }
+
+  async function handleDesactivar(equipo) {
+    try {
+      await equiposService.desactivarEquipo(equipo.id_equipo)
+      cargarEquipos()
+    } catch (err) {
+      setError(err.response?.data?.error || 'No se pudo desactivar el equipo')
+    }
+  }
+
+  async function handleGenerar() {
+    if (!materia) return
+    setGenerando(true)
+    setAvisoGenerar(null)
+    setError('')
+    try {
+      const data = await equiposService.generarEquipos({ id_materia: materia.id_materia, tipo: tipoGenerar })
+      setAvisoGenerar(
+        `Se crearon ${data.equipos_creados} equipo(s) de tipo ${TIPO_LABEL[tipoGenerar]}. ` +
+          (data.alumnos_sin_asignar > 0
+            ? `${data.alumnos_sin_asignar} alumno(s) quedaron sin asignar.`
+            : 'Todos los alumnos disponibles fueron asignados.')
+      )
+      cargarEquipos()
+    } catch (err) {
+      setError(err.response?.data?.error || 'No se pudieron generar los equipos')
+    } finally {
+      setGenerando(false)
+    }
+  }
+
+  const equiposFiltrados = useMemo(() => {
+    let lista = equipos
+    if (filtroTipo !== 'todos') {
+      lista = lista.filter((eq) => eq.tipo === filtroTipo)
+    }
+    const termino = busqueda.trim().toLowerCase()
+    if (termino) {
+      lista = lista.filter(
+        (eq) =>
+          eq.nombre.toLowerCase().includes(termino) ||
+          eq.integrantes.some((it) => `${it.nombre} ${it.apellido_paterno}`.toLowerCase().includes(termino))
+      )
+    }
+    return lista
+  }, [equipos, filtroTipo, busqueda])
+
+  const conteoPorTipo = useMemo(() => {
+    const conteo = { Practica: 0, Tarea: 0, Proyecto: 0 }
+    equipos.forEach((eq) => {
+      conteo[eq.tipo] = (conteo[eq.tipo] ?? 0) + 1
+    })
+    return conteo
+  }, [equipos])
 
   return (
     <PageWrapper
       title={
-        <>
-          Equipos — Teoría de la Computación <span style={{ fontWeight: 400, color: 'var(--gray-400)' }}>· 4BM1</span>
-        </>
+        materia ? (
+          <>
+            Equipos — {materia.nombre} <span style={{ fontWeight: 400, color: 'var(--gray-400)' }}>· {materia.grupo}</span>
+          </>
+        ) : (
+          'Equipos'
+        )
       }
       actions={
-        <>
-          <div className="topbar-semester">2026/1</div>
-          <button className="btn btn-primary btn-sm" onClick={() => navigate('/equipos/nuevo')}>
-            <Plus className="icon-sm" />
-            Nuevo equipo
-          </button>
-        </>
+        <button
+          className="btn btn-primary btn-sm"
+          onClick={() => navigate(`/equipos/nuevo?materia=${claveMateria}`)}
+          disabled={!claveMateria}
+        >
+          <Plus className="icon-sm" />
+          Nuevo equipo
+        </button>
       }
     >
       <div className="toolbar">
         <div className="search-wrap">
           <Search className="icon-sm" />
-          <input className="search-input" placeholder="Buscar equipo o alumno…" />
+          <input
+            className="search-input"
+            placeholder="Buscar equipo o alumno…"
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+          />
         </div>
+        {materias.length > 0 && (
+          <select className="select-input" value={claveMateria} onChange={handleCambioMateria}>
+            {materias.map((m) => (
+              <option key={m.id_materia} value={m.clave}>
+                {m.clave} — {m.nombre} · {m.grupo}
+              </option>
+            ))}
+          </select>
+        )}
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          <span className="btn btn-primary btn-sm">Todos (8)</span>
-          <span className="btn btn-secondary btn-sm">Prácticas (3)</span>
-          <span className="btn btn-secondary btn-sm">Tareas (3)</span>
-          <span className="btn btn-secondary btn-sm">Proyecto (2)</span>
+          <span
+            className={`btn btn-sm ${filtroTipo === 'todos' ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={() => setFiltroTipo('todos')}
+          >
+            Todos ({equipos.length})
+          </span>
+          {TIPOS.map((t) => (
+            <span
+              key={t}
+              className={`btn btn-sm ${filtroTipo === t ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => setFiltroTipo(t)}
+            >
+              {TIPO_LABEL[t]}s ({conteoPorTipo[t] ?? 0})
+            </span>
+          ))}
         </div>
       </div>
 
-      <div className="equipo-grid">
-        {EQUIPOS.map((eq) => (
-          <div key={eq.id} className="equipo-card">
-            <div className="equipo-card-header">
-              <div>
-                <div className="equipo-name">{eq.nombre}</div>
-                <div className="text-xs" style={{ marginTop: 4 }}>{eq.materia}</div>
-              </div>
-              <Badge variant={eq.tipoVariant}>{eq.tipo}</Badge>
-            </div>
-            <div className="equipo-members">
-              {eq.miembros.map((m) => (
-                <div key={m.iniciales + m.nombre} className="member-row">
-                  <Avatar size="xs" initials={m.iniciales} bg={m.bg} />
-                  {m.nombre}
-                </div>
-              ))}
-            </div>
-            <div style={{ marginBottom: 8 }}>
-              <div className="flex-between mb8">
-                <span className="text-xs">Completadas</span>
-                <span className="text-xs font-600">{eq.completadas}/{eq.total}</span>
-              </div>
-              <ProgressBar percent={eq.porcentaje} color={eq.progressColor} />
-            </div>
-            <div className="flex-between">
-              <Badge variant={eq.promedioVariant}>Prom: {eq.promedio.toFixed(1)}</Badge>
-              <span className="btn btn-ghost btn-sm" onClick={() => navigate('/equipos/1')}>
-                Ver detalle <ArrowRight className="icon-sm" />
-              </span>
-            </div>
-          </div>
-        ))}
-        <div
-          className="equipo-card"
-          style={{
-            background: 'var(--gray-50)',
-            borderStyle: 'dashed',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            minHeight: 180,
-            flexDirection: 'column',
-            gap: 8,
-            cursor: 'pointer',
-          }}
-          onClick={() => navigate('/equipos/nuevo')}
-        >
-          <Plus style={{ width: 28, height: 28, color: 'var(--gray-200)' }} />
-          <div style={{ fontSize: 13, color: 'var(--gray-400)' }}>Nuevo equipo</div>
+      <div className="card mb20">
+        <div className="card-body" style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+          <span className="text-sm font-600">Asignación aleatoria masiva</span>
+          <select className="select-input" value={tipoGenerar} onChange={(e) => setTipoGenerar(e.target.value)}>
+            {TIPOS.map((t) => (
+              <option key={t} value={t}>
+                {TIPO_LABEL[t]}
+              </option>
+            ))}
+          </select>
+          <button className="btn btn-secondary btn-sm" onClick={handleGenerar} disabled={!materia || generando}>
+            {generando ? <Loader2 className="icon-sm spin" /> : <Shuffle className="icon-sm" />}
+            Generar equipos
+          </button>
+          {avisoGenerar && <span className="text-xs" style={{ color: 'var(--blue)' }}>{avisoGenerar}</span>}
         </div>
       </div>
+
+      {error && (
+        <div className="login-error" style={{ marginBottom: 16 }}>
+          {error}
+        </div>
+      )}
+
+      {loading ? (
+        <div style={{ padding: 48, textAlign: 'center' }}>
+          <Loader2 className="icon-xl spin" style={{ color: 'var(--blue)' }} />
+        </div>
+      ) : equiposFiltrados.length === 0 ? (
+        <div className="card">
+          <EmptyState
+            icon={Users}
+            title="Sin equipos registrados"
+            description="Crea un equipo manualmente o usa la asignación aleatoria masiva."
+          />
+        </div>
+      ) : (
+        <div className="equipo-grid">
+          {equiposFiltrados.map((eq) => (
+            <div key={eq.id_equipo} className="equipo-card">
+              <div className="equipo-card-header">
+                <div>
+                  <div className="equipo-name">{eq.nombre}</div>
+                  <div className="text-xs" style={{ marginTop: 4 }}>{materia?.nombre}</div>
+                </div>
+                <Badge variant={TIPO_VARIANT[eq.tipo]}>{TIPO_LABEL[eq.tipo]}</Badge>
+              </div>
+              <div className="equipo-members">
+                {eq.integrantes.map((it) => (
+                  <div key={it.id_alumno} className="member-row">
+                    <Avatar size="xs" initials={iniciales(it)} />
+                    {it.nombre} {it.apellido_paterno}
+                  </div>
+                ))}
+              </div>
+              <div className="flex-between">
+                <ActionButtons onView={() => navigate(`/equipos/${eq.id_equipo}`)} onDelete={() => handleDesactivar(eq)} />
+                <span className="btn btn-ghost btn-sm" onClick={() => navigate(`/equipos/${eq.id_equipo}`)}>
+                  Ver detalle <ArrowRight className="icon-sm" />
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </PageWrapper>
   )
 }

@@ -1,57 +1,178 @@
 // Pantalla 06 — Detalle del Equipo
 // Rol: Profesor
 // URL: /equipos/:id
-// Descripción: Integrantes, calificaciones y actividades asociadas al equipo.
+// Descripción: Integrantes del equipo. Las calificaciones y actividades del equipo se
+// habilitan en las Sesiones 7 (Actividades) y 9 (Calificaciones) — aquí solo se muestra
+// información de equipo/integrantes, ya conectada a la API real.
 
-import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Pencil, Plus, Save } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
+import { ArrowLeft, Pencil, Check, Loader2, ClipboardList } from 'lucide-react'
 import PageWrapper from '../../components/layout/PageWrapper'
 import Badge from '../../components/ui/Badge'
 import Avatar from '../../components/ui/Avatar'
+import EmptyState from '../../components/ui/EmptyState'
+import * as equiposService from '../../services/equipos.service'
+import * as alumnosService from '../../services/alumnos.service'
 
-const INTEGRANTES = [
-  { iniciales: 'SR', nombre: 'Sofía Ramírez Torres', boleta: '2023630045', promedio: 9.1, variant: 'green' },
-  { iniciales: 'JL', nombre: 'Jorge López Mendoza', boleta: '2023630078', promedio: 8.6, variant: 'green', bg: '#27AE60' },
-  { iniciales: 'AM', nombre: 'Ana Martínez Soto', boleta: '2023630112', promedio: 8.4, variant: 'yellow', bg: '#E07B2A' },
-]
+const TIPO_VARIANT = { Practica: 'blue', Tarea: 'navy', Proyecto: 'orange' }
+const TIPO_LABEL = { Practica: 'Práctica', Tarea: 'Tarea', Proyecto: 'Proyecto' }
+const TIPOS_ESPEJO = ['Practica', 'Tarea']
 
-const RESUMEN = [
-  { valor: '8.7', color: 'var(--navy)', label: 'Promedio equipo' },
-  { valor: '67%', color: 'var(--green)', label: 'Entregadas' },
-  { valor: '4', color: 'var(--blue)', label: 'A tiempo' },
-  { valor: '2', color: 'var(--red)', label: 'Pendientes' },
-]
+function tiposExcluidos(tipo) {
+  return TIPOS_ESPEJO.includes(tipo) ? TIPOS_ESPEJO : [tipo]
+}
 
-const ACTIVIDADES = [
-  { nombre: 'Práctica 1 — AFD', entregaTipo: 'individual', calEquipo: '9.0', calSofia: '9.5', calJorge: '9.0', calAna: '8.5', promedio: '9.0', promedioColor: 'var(--green)', estatus: 'Calificada', variant: 'green' },
-  { nombre: 'Práctica 2 — AFND', entregaTipo: 'individual', calEquipo: '8.5', calSofia: '9.0', calJorge: '8.0', calAna: '8.5', promedio: '8.5', promedioColor: 'var(--green)', estatus: 'Calificada', variant: 'green' },
-  { nombre: 'Práctica 3 — Autómatas', entregaTipo: 'equipo', calEquipo: '8.5', calSofia: '9.0', calJorge: '8.5', calAna: '8.0', promedio: '8.5', promedioColor: 'var(--green)', estatus: 'En revisión', variant: 'blue' },
-  { nombre: 'Práctica 5 — Lenguajes', entregaTipo: 'individual', calEquipo: null, calSofia: null, calJorge: null, calAna: null, promedio: '—', promedioColor: 'var(--gray-400)', estatus: 'Pendiente', variant: 'yellow' },
-]
+function iniciales(persona) {
+  return `${persona.nombre?.[0] ?? ''}${persona.apellido_paterno?.[0] ?? ''}`.toUpperCase()
+}
 
 export default function DetalleEquipo() {
   const navigate = useNavigate()
+  const { id } = useParams()
+
+  const [equipo, setEquipo] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  const [editando, setEditando] = useState(false)
+  const [nombreEdit, setNombreEdit] = useState('')
+  const [seleccion, setSeleccion] = useState([])
+  const [alumnosMateria, setAlumnosMateria] = useState([])
+  const [equiposMateria, setEquiposMateria] = useState([])
+  const [guardando, setGuardando] = useState(false)
+
+  function cargar() {
+    setLoading(true)
+    equiposService
+      .obtenerEquipo(id)
+      .then((data) => {
+        setEquipo(data)
+        setError('')
+      })
+      .catch((err) => {
+        setError(err.response?.data?.error || 'No se pudo cargar el equipo')
+        setEquipo(null)
+      })
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => {
+    cargar()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id])
+
+  async function iniciarEdicion() {
+    if (!equipo) return
+    setNombreEdit(equipo.nombre)
+    setSeleccion(equipo.integrantes.map((it) => it.id_alumno))
+    setEditando(true)
+    try {
+      const [alumnosData, equiposData] = await Promise.all([
+        alumnosService.listarAlumnos(equipo.materia_clave),
+        equiposService.listarEquipos(equipo.materia_clave),
+      ])
+      setAlumnosMateria(alumnosData.alumnos)
+      setEquiposMateria(equiposData.equipos)
+    } catch (err) {
+      setError(err.response?.data?.error || 'No se pudieron cargar los alumnos de la materia')
+    }
+  }
+
+  const elegibles = useMemo(() => {
+    if (!equipo) return []
+    const tiposAExcluir = tiposExcluidos(equipo.tipo)
+    // Excluye tanto el propio equipo como su "espejo" (Practica/Tarea con el mismo
+    // nombre comparten integrantes, ver CLAUDE.md) — de lo contrario sus propios
+    // integrantes aparecerían como ya ocupados y desaparecerían del pool elegible.
+    const idsConEquipo = new Set(
+      equiposMateria
+        .filter((eq) => tiposAExcluir.includes(eq.tipo) && eq.id_equipo !== equipo.id_equipo && eq.nombre !== equipo.nombre)
+        .flatMap((eq) => eq.integrantes.map((it) => it.id_alumno))
+    )
+    return alumnosMateria.filter((al) => !idsConEquipo.has(al.id_alumno))
+  }, [alumnosMateria, equiposMateria, equipo])
+
+  function toggleSeleccion(idAlumno) {
+    setSeleccion((prev) => {
+      if (prev.includes(idAlumno)) return prev.filter((id) => id !== idAlumno)
+      if (prev.length >= 3) return prev
+      return [...prev, idAlumno]
+    })
+  }
+
+  async function handleGuardar() {
+    if (!nombreEdit.trim() || seleccion.length !== 3) {
+      setError('El equipo necesita un nombre y exactamente 3 integrantes')
+      return
+    }
+    setGuardando(true)
+    setError('')
+    try {
+      await equiposService.actualizarEquipo(id, { nombre: nombreEdit.trim(), integrantes: seleccion })
+      setEditando(false)
+      cargar()
+    } catch (err) {
+      setError(err.response?.data?.error || 'No se pudo actualizar el equipo')
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <PageWrapper title="Equipo">
+        <div style={{ padding: 48, textAlign: 'center' }}>
+          <Loader2 className="icon-xl spin" style={{ color: 'var(--blue)' }} />
+        </div>
+      </PageWrapper>
+    )
+  }
+
+  if (!equipo) {
+    return (
+      <PageWrapper
+        title="Equipo"
+        actions={
+          <button className="btn btn-secondary btn-sm" onClick={() => navigate('/equipos')}>
+            <ArrowLeft className="icon-sm" />
+            Volver
+          </button>
+        }
+      >
+        <div className="login-error">{error || 'Equipo no encontrado'}</div>
+      </PageWrapper>
+    )
+  }
 
   return (
     <PageWrapper
       title={
         <>
-          Equipo Alfa <span style={{ fontWeight: 400, color: 'var(--gray-400)' }}>· Teoría de la Computación</span>
+          {equipo.nombre} <span style={{ fontWeight: 400, color: 'var(--gray-400)' }}>· {equipo.materia_nombre}</span>
         </>
       }
       actions={
         <>
-          <button className="btn btn-secondary btn-sm" onClick={() => navigate('/equipos')}>
+          <button className="btn btn-secondary btn-sm" onClick={() => navigate(`/equipos?materia=${equipo.materia_clave}`)}>
             <ArrowLeft className="icon-sm" />
             Volver
           </button>
-          <button className="btn btn-primary btn-sm">
-            <Pencil className="icon-sm" />
-            Editar
-          </button>
+          {!editando && (
+            <button className="btn btn-primary btn-sm" onClick={iniciarEdicion}>
+              <Pencil className="icon-sm" />
+              Editar
+            </button>
+          )}
         </>
       }
     >
+      {error && (
+        <div className="login-error" style={{ marginBottom: 16 }}>
+          {error}
+        </div>
+      )}
+
       <div className="card mb20" style={{ overflow: 'hidden' }}>
         <div
           style={{
@@ -64,155 +185,99 @@ export default function DetalleEquipo() {
             gap: 16,
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <div
-              style={{
-                width: 52,
-                height: 52,
-                borderRadius: 12,
-                background: 'rgba(255,255,255,.15)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: 22,
-                color: 'white',
-                fontWeight: 700,
-              }}
-            >
-              Α
-            </div>
-            <div>
-              <div style={{ fontSize: 18, fontWeight: 700, color: 'white' }}>Equipo Alfa</div>
-              <div style={{ fontSize: 12, color: 'rgba(255,255,255,.6)' }}>Teoría de la Computación · 4BM1 · 2026/1</div>
+          <div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: 'white' }}>{equipo.nombre}</div>
+            <div style={{ fontSize: 12, color: 'rgba(255,255,255,.6)' }}>
+              {equipo.materia_nombre} · {equipo.materia_grupo}
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 16, textAlign: 'center', flexWrap: 'wrap' }}>
-            <div>
-              <div style={{ fontSize: 22, fontWeight: 700, color: 'white' }}>8.7</div>
-              <div style={{ fontSize: 11, color: 'rgba(255,255,255,.6)' }}>Promedio</div>
-            </div>
-            <div style={{ borderLeft: '1px solid rgba(255,255,255,.2)', paddingLeft: 16 }}>
-              <div style={{ fontSize: 22, fontWeight: 700, color: 'white' }}>4/6</div>
-              <div style={{ fontSize: 11, color: 'rgba(255,255,255,.6)' }}>Actividades</div>
-            </div>
-            <div style={{ borderLeft: '1px solid rgba(255,255,255,.2)', paddingLeft: 16 }}>
-              <Badge variant="blue">Práctica</Badge>
-            </div>
-          </div>
+          <Badge variant={TIPO_VARIANT[equipo.tipo]}>{TIPO_LABEL[equipo.tipo]}</Badge>
         </div>
       </div>
 
-      <div className="two-col mb20">
-        <div className="card">
-          <div className="card-header">
-            <span className="card-title">Integrantes</span>
-            <Badge variant="blue">3 alumnos</Badge>
-          </div>
-          <div className="card-body" style={{ padding: 14 }}>
-            {INTEGRANTES.map((it, i) => (
-              <div key={it.boleta} className={`integrante-row${i < INTEGRANTES.length - 1 ? ' mb8' : ''}`}>
+      <div className="card mb20">
+        <div className="card-header">
+          <span className="card-title">Integrantes</span>
+          <Badge variant="blue">{editando ? seleccion.length : equipo.integrantes.length} alumnos</Badge>
+        </div>
+        <div className="card-body" style={{ padding: 14 }}>
+          {!editando ? (
+            equipo.integrantes.map((it, i) => (
+              <div key={it.id_alumno} className={`integrante-row${i < equipo.integrantes.length - 1 ? ' mb8' : ''}`}>
                 <div className="integrante-info">
-                  <Avatar initials={it.iniciales} bg={it.bg} />
+                  <Avatar initials={iniciales(it)} />
                   <div>
-                    <div style={{ fontSize: 13, fontWeight: 600 }}>{it.nombre}</div>
+                    <div style={{ fontSize: 13, fontWeight: 600 }}>
+                      {it.nombre} {it.apellido_paterno} {it.apellido_materno ?? ''}
+                    </div>
                     <div className="text-xs">{it.boleta}</div>
                   </div>
                 </div>
-                <Badge variant={it.variant}>{it.promedio}</Badge>
               </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="card">
-          <div className="card-header">
-            <span className="card-title">Resumen de desempeño</span>
-          </div>
-          <div className="card-body">
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-              {RESUMEN.map((r) => (
-                <div key={r.label} style={{ background: 'var(--gray-50)', borderRadius: 10, padding: 12, textAlign: 'center' }}>
-                  <div style={{ fontSize: 24, fontWeight: 700, color: r.color }}>{r.valor}</div>
-                  <div className="text-xs">{r.label}</div>
-                </div>
-              ))}
-            </div>
-          </div>
+            ))
+          ) : (
+            <>
+              <div className="form-group">
+                <label className="form-label" htmlFor="nombre-equipo">
+                  Nombre del equipo
+                </label>
+                <input
+                  id="nombre-equipo"
+                  className="form-control"
+                  value={nombreEdit}
+                  onChange={(e) => setNombreEdit(e.target.value)}
+                />
+              </div>
+              {elegibles.map((al) => {
+                const marcado = seleccion.includes(al.id_alumno)
+                return (
+                  <div
+                    key={al.id_alumno}
+                    className="integrante-row mb8"
+                    style={{
+                      cursor: 'pointer',
+                      border: marcado ? '1px solid var(--blue)' : '1px solid transparent',
+                      background: marcado ? 'var(--blue-light)' : 'transparent',
+                      borderRadius: 10,
+                    }}
+                    onClick={() => toggleSeleccion(al.id_alumno)}
+                  >
+                    <div className="integrante-info">
+                      <Avatar initials={iniciales(al)} />
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 600 }}>
+                          {al.nombre} {al.apellido_paterno} {al.apellido_materno ?? ''}
+                        </div>
+                        <div className="text-xs">{al.boleta}</div>
+                      </div>
+                    </div>
+                    <input type="checkbox" checked={marcado} readOnly />
+                  </div>
+                )
+              })}
+              <div className="form-actions" style={{ marginTop: 12 }}>
+                <button className="btn btn-secondary" onClick={() => setEditando(false)} disabled={guardando}>
+                  Cancelar
+                </button>
+                <button className="btn btn-primary" onClick={handleGuardar} disabled={guardando || seleccion.length !== 3}>
+                  {guardando ? <Loader2 className="icon-sm spin" /> : <Check className="icon-sm" />}
+                  Guardar cambios
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
       <div className="card">
         <div className="card-header">
           <span className="card-title">Actividades del equipo</span>
-          <button className="btn btn-primary btn-sm">
-            <Plus className="icon-sm" />
-            Agregar
-          </button>
         </div>
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Actividad</th>
-                <th>Entrega</th>
-                <th>Cal. Equipo</th>
-                <th>Sofía R.</th>
-                <th>Jorge L.</th>
-                <th>Ana M.</th>
-                <th>Promedio</th>
-                <th>Estatus</th>
-              </tr>
-            </thead>
-            <tbody>
-              {ACTIVIDADES.map((a) => (
-                <tr key={a.nombre}>
-                  <td>
-                    <span className="link-inline" onClick={() => navigate('/actividades/1')}>
-                      {a.nombre}
-                    </span>
-                  </td>
-                  <td>
-                    <Badge variant={a.entregaTipo === 'equipo' ? 'blue' : 'gray'} style={{ fontSize: 10, padding: '2px 8px' }}>
-                      {a.entregaTipo === 'equipo' ? 'Equipo' : 'Ind.'}
-                    </Badge>
-                  </td>
-                  <td>
-                    <input className="calificacion-input" defaultValue={a.calEquipo ?? undefined} placeholder={a.calEquipo ? undefined : '—'} />
-                  </td>
-                  <td>
-                    <input className="calificacion-input" defaultValue={a.calSofia ?? undefined} placeholder={a.calSofia ? undefined : '—'} />
-                  </td>
-                  <td>
-                    <input className="calificacion-input" defaultValue={a.calJorge ?? undefined} placeholder={a.calJorge ? undefined : '—'} />
-                  </td>
-                  <td>
-                    <input className="calificacion-input" defaultValue={a.calAna ?? undefined} placeholder={a.calAna ? undefined : '—'} />
-                  </td>
-                  <td className={a.promedio === '—' ? '' : 'td-bold'} style={{ color: a.promedioColor }}>
-                    {a.promedio}
-                  </td>
-                  <td>
-                    <Badge variant={a.variant}>{a.estatus}</Badge>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <div
-          className="form-actions"
-          style={{
-            padding: '12px 20px',
-            background: 'var(--blue-light)',
-            borderTop: '1px solid var(--gray-200)',
-          }}
-        >
-          <span className="btn btn-secondary btn-sm">Descartar</span>
-          <span className="btn btn-primary btn-sm">
-            <Save className="icon-sm" />
-            Guardar calificaciones
-          </span>
-        </div>
+        <EmptyState
+          icon={ClipboardList}
+          title="Disponible próximamente"
+          description="Las actividades y calificaciones del equipo se conectan en las siguientes sesiones del sprint (Actividades y Calificaciones)."
+        />
       </div>
     </PageWrapper>
   )
