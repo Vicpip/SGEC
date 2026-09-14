@@ -3,115 +3,174 @@
 // URL: /alumnos?materia=:clave
 // Descripción: Lista de alumnos inscritos en la materia/grupo.
 
-import { useNavigate } from 'react-router-dom'
-import { Search, Upload } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { Search, Upload, Users, Loader2 } from 'lucide-react'
 import PageWrapper from '../../components/layout/PageWrapper'
 import Badge from '../../components/ui/Badge'
 import ActionButtons from '../../components/ui/ActionButtons'
-
-const ALUMNOS = [
-  { n: 1, boleta: '2023630045', nombre: 'Ramírez Torres, Sofía Valentina', grupo: '4BM1', practica: 'Equipo Alfa', tarea: 'Grupo T1', tareaVariant: 'navy', proyecto: 'Proyecto Sigma' },
-  { n: 2, boleta: '2023630078', nombre: 'López Mendoza, Jorge Alberto', grupo: '4BM1', practica: 'Equipo Alfa', tarea: 'Grupo T2', tareaVariant: 'navy', proyecto: 'Proyecto Sigma' },
-  { n: 3, boleta: '2023630134', nombre: 'Hernández Cruz, Pablo Emilio', grupo: '4BM1', practica: 'Equipo Beta', tarea: 'Grupo T3', tareaVariant: 'navy', proyecto: 'Proyecto Omega' },
-  { n: 4, boleta: '2023630189', nombre: 'Flores Gutiérrez, Valeria Isabel', grupo: '4BM1', practica: 'Equipo Gamma', tarea: 'Grupo T2', tareaVariant: 'navy', proyecto: 'Proyecto Sigma' },
-  { n: 5, boleta: '2023630172', nombre: 'Navarro Ríos, Diego Alejandro', grupo: '4BM1', practica: 'Equipo Beta', tarea: 'Sin asignar', tareaVariant: 'gray', proyecto: 'Sin asignar', proyectoVariant: 'gray' },
-]
+import EmptyState from '../../components/ui/EmptyState'
+import * as alumnosService from '../../services/alumnos.service'
+import * as materiasService from '../../services/materias.service'
 
 export default function ListaAlumnos() {
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const claveMateria = searchParams.get('materia') ?? ''
+
+  const [materias, setMaterias] = useState([])
+  const [materia, setMateria] = useState(null)
+  const [alumnos, setAlumnos] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [busqueda, setBusqueda] = useState('')
+
+  useEffect(() => {
+    materiasService
+      .listarMaterias()
+      .then((data) => {
+        setMaterias(data)
+        if (!claveMateria && data[0]) {
+          setSearchParams({ materia: data[0].clave }, { replace: true })
+        }
+      })
+      .catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    if (!claveMateria) return
+
+    setLoading(true)
+    alumnosService
+      .listarAlumnos(claveMateria)
+      .then((data) => {
+        setAlumnos(data.alumnos)
+        setMateria(data.materia)
+        setError('')
+      })
+      .catch((err) => {
+        setError(err.response?.data?.error || 'No se pudieron cargar los alumnos')
+        setAlumnos([])
+        setMateria(null)
+      })
+      .finally(() => setLoading(false))
+  }, [claveMateria])
+
+  const alumnosFiltrados = useMemo(() => {
+    const termino = busqueda.trim().toLowerCase()
+    if (!termino) return alumnos
+    return alumnos.filter((a) => {
+      const nombreCompleto = `${a.apellido_paterno} ${a.apellido_materno ?? ''} ${a.nombre}`.toLowerCase()
+      return nombreCompleto.includes(termino) || a.boleta.toLowerCase().includes(termino)
+    })
+  }, [alumnos, busqueda])
+
+  function handleCambioMateria(e) {
+    setSearchParams({ materia: e.target.value })
+  }
 
   return (
     <PageWrapper
       title={
-        <>
-          Alumnos — Teoría de la Computación <span style={{ fontWeight: 400, color: 'var(--gray-400)' }}>· 4BM1</span>
-        </>
+        materia ? (
+          <>
+            Alumnos — {materia.nombre}{' '}
+            <span style={{ fontWeight: 400, color: 'var(--gray-400)' }}>· {materia.grupo}</span>
+          </>
+        ) : (
+          'Alumnos'
+        )
       }
       actions={
-        <>
-          <div className="topbar-semester">2026/1</div>
-          <button className="btn btn-secondary btn-sm" onClick={() => navigate('/alumnos/importar')}>
-            <Upload className="icon-sm" />
-            Importar
-          </button>
-        </>
+        <button
+          className="btn btn-secondary btn-sm"
+          onClick={() => navigate(`/alumnos/importar?materia=${claveMateria}`)}
+          disabled={!claveMateria}
+        >
+          <Upload className="icon-sm" />
+          Importar
+        </button>
       }
     >
       <div className="toolbar">
         <div className="search-wrap">
           <Search className="icon-sm" />
-          <input className="search-input" placeholder="Buscar por nombre o boleta…" />
+          <input
+            className="search-input"
+            placeholder="Buscar por nombre o boleta…"
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+          />
         </div>
-        <select className="select-input" defaultValue="4BM1">
-          <option value="4BM1">4BM1</option>
-        </select>
-        <div style={{ display: 'flex', gap: 6, marginLeft: 'auto', flexWrap: 'wrap' }}>
-          <Badge variant="blue" style={{ padding: '6px 12px' }}>32 alumnos</Badge>
-          <Badge variant="green" style={{ padding: '6px 12px' }}>32 en práctica</Badge>
-          <Badge variant="navy" style={{ padding: '6px 12px' }}>30 en tarea</Badge>
-          <Badge variant="orange" style={{ padding: '6px 12px' }}>27 en proyecto</Badge>
+        {materias.length > 0 && (
+          <select className="select-input" value={claveMateria} onChange={handleCambioMateria}>
+            {materias.map((m) => (
+              <option key={m.id_materia} value={m.clave}>
+                {m.clave} — {m.nombre} · {m.grupo}
+              </option>
+            ))}
+          </select>
+        )}
+        <div style={{ marginLeft: 'auto' }}>
+          <Badge variant="blue" style={{ padding: '6px 12px' }}>
+            {alumnos.length} alumnos
+          </Badge>
         </div>
       </div>
 
       <div className="card">
         <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Boleta</th>
-                <th>Nombre completo</th>
-                <th>Grupo</th>
-                <th>Equipo Práctica</th>
-                <th>Equipo Tarea</th>
-                <th>Equipo Proyecto</th>
-                <th>Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {ALUMNOS.map((al) => (
-                <tr key={al.boleta}>
-                  <td className="text-xs">{al.n}</td>
-                  <td className="td-bold">{al.boleta}</td>
-                  <td className="td-bold">{al.nombre}</td>
-                  <td>{al.grupo}</td>
-                  <td>
-                    <Badge variant="blue">{al.practica}</Badge>
-                  </td>
-                  <td>
-                    <Badge variant={al.tareaVariant}>{al.tarea}</Badge>
-                  </td>
-                  <td>
-                    <Badge variant={al.proyectoVariant ?? 'orange'}>{al.proyecto}</Badge>
-                  </td>
-                  <td>
-                    <ActionButtons onView={() => navigate('/alumnos/1/actividades')} onEdit={() => {}} />
-                  </td>
+          {loading ? (
+            <div style={{ padding: 48, textAlign: 'center' }}>
+              <Loader2 className="icon-xl spin" style={{ color: 'var(--blue)' }} />
+            </div>
+          ) : error ? (
+            <div style={{ padding: 24, color: 'var(--red)', fontSize: 13 }}>{error}</div>
+          ) : materias.length === 0 ? (
+            <EmptyState
+              icon={Users}
+              title="Sin materias registradas"
+              description="Crea una materia para poder inscribir alumnos."
+            />
+          ) : alumnosFiltrados.length === 0 ? (
+            <EmptyState
+              icon={Users}
+              title="Sin alumnos inscritos"
+              description="Importa una lista desde Excel para dar de alta a los alumnos de este grupo."
+            />
+          ) : (
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Boleta</th>
+                  <th>Nombre completo</th>
+                  <th>Correo institucional</th>
+                  <th>Grupo</th>
+                  <th>Carrera</th>
+                  <th>Acciones</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <div
-          style={{
-            padding: '12px 16px',
-            background: 'var(--gray-50)',
-            borderTop: '1px solid var(--gray-100)',
-            fontSize: 12,
-            color: 'var(--gray-400)',
-            display: 'flex',
-            justifyContent: 'space-between',
-            flexWrap: 'wrap',
-            gap: 8,
-          }}
-        >
-          <span>Mostrando 5 de 32 alumnos</span>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            <span className="btn btn-secondary btn-sm">1</span>
-            <span className="btn btn-secondary btn-sm">2</span>
-            <span className="btn btn-secondary btn-sm">3</span>
-            <span className="btn btn-secondary btn-sm">4</span>
-          </div>
+              </thead>
+              <tbody>
+                {alumnosFiltrados.map((al, i) => (
+                  <tr key={al.id_alumno}>
+                    <td className="text-xs">{i + 1}</td>
+                    <td className="td-bold">{al.boleta}</td>
+                    <td className="td-bold">
+                      {al.apellido_paterno} {al.apellido_materno ?? ''}, {al.nombre}
+                    </td>
+                    <td className="text-sm">{al.correo_institucional}</td>
+                    <td>{al.grupo}</td>
+                    <td className="text-sm">{al.carrera ?? '—'}</td>
+                    <td>
+                      <ActionButtons onView={() => navigate(`/alumnos/${al.id_alumno}/actividades`)} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
     </PageWrapper>

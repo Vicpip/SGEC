@@ -277,7 +277,7 @@ solo íconos `lucide-react`. Tarjetas con sombra suave (`--shadow`) y `border-ra
 | S12 | Auditoría de seguridad final y hardening | ⏳ Pendiente (antes oct 16, 2026) | — |
 
 **Pendientes transversales (resolver en Sesión 12):**
-- multer con severidad alta en npm audit (DoS) — revisar en S5 o S12
+- (ninguno por ahora — el hallazgo de multer se resolvió en S5, ver nota debajo)
 
 ## Instrucciones por sesión
 

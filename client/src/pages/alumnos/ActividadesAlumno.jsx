@@ -3,106 +3,166 @@
 // URL: /alumnos/:id/actividades
 // Descripción: Historial de actividades y calificaciones de un alumno específico.
 
-import { useNavigate } from 'react-router-dom'
-import { ArrowLeft } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
+import { ArrowLeft, Loader2, ClipboardList } from 'lucide-react'
 import PageWrapper from '../../components/layout/PageWrapper'
 import Badge from '../../components/ui/Badge'
 import Avatar from '../../components/ui/Avatar'
+import EmptyState from '../../components/ui/EmptyState'
+import * as alumnosService from '../../services/alumnos.service'
 
-const ACTIVIDADES = [
-  { nombre: 'Práctica 1 — AFD', tipo: 'Práctica', tipoVariant: 'blue', equipo: 'Equipo Alfa', calEquipo: '9.0', calIndividual: '9.5', calColor: 'var(--green)', estatus: 'Calificada', estatusVariant: 'green', fecha: '15 Feb 2026' },
-  { nombre: 'Tarea 1 — Lenguajes formales', tipo: 'Tarea', tipoVariant: 'navy', equipo: 'Grupo T1', calEquipo: '8.0', calIndividual: '8.0', calColor: 'var(--yellow)', estatus: 'Calificada', estatusVariant: 'green', fecha: '10 Mar 2026' },
-  { nombre: 'Práctica 3 — Autómatas', tipo: 'Práctica', tipoVariant: 'blue', equipo: 'Equipo Alfa', calEquipo: '8.5', calIndividual: '9.0', calColor: 'var(--blue)', estatus: 'En revisión', estatusVariant: 'blue', fecha: '22 Mar 2026' },
-  { nombre: 'Tarea 2 — Gramáticas formales', tipo: 'Tarea', tipoVariant: 'navy', equipo: 'Grupo T1', calEquipo: '—', calIndividual: '—', calColor: 'var(--gray-400)', estatus: 'Pendiente', estatusVariant: 'yellow', fecha: '5 Abr 2026' },
-  { nombre: 'Proyecto — Etapa 1', tipo: 'Proyecto', tipoVariant: 'orange', equipo: 'Proyecto Sigma', calEquipo: '7.0', calIndividual: '7.5', calColor: 'var(--yellow)', estatus: 'Entregada', estatusVariant: 'green', fecha: '1 Abr 2026' },
-]
+const VARIANT_TIPO = { 'En clase': 'gray', Practica: 'blue', Tarea: 'navy', Proyecto: 'orange' }
+const VARIANT_ESTATUS = { Calificada: 'green', 'En revision': 'yellow', Pendiente: 'red' }
+
+function iniciales(alumno) {
+  const a = alumno?.nombre?.[0] ?? ''
+  const b = alumno?.apellido_paterno?.[0] ?? ''
+  return `${a}${b}`.toUpperCase()
+}
 
 export default function ActividadesAlumno() {
   const navigate = useNavigate()
+  const { id } = useParams()
+
+  const [alumno, setAlumno] = useState(null)
+  const [actividades, setActividades] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    setLoading(true)
+    alumnosService
+      .obtenerActividadesAlumno(id)
+      .then((data) => {
+        setAlumno(data.alumno)
+        setActividades(data.actividades)
+        setError('')
+      })
+      .catch((err) => setError(err.response?.data?.error || 'No se pudo cargar la información del alumno'))
+      .finally(() => setLoading(false))
+  }, [id])
+
+  const { promedio, entregadas } = useMemo(() => {
+    const calificadas = actividades.filter((a) => a.nota !== null)
+    const promedio = calificadas.length
+      ? calificadas.reduce((acc, a) => acc + Number(a.nota), 0) / calificadas.length
+      : null
+    const entregadas = actividades.filter((a) => a.estatus_entrega !== null).length
+    return { promedio, entregadas }
+  }, [actividades])
 
   return (
     <PageWrapper
       title="Actividades del Alumno"
       actions={
-        <button className="btn btn-secondary btn-sm" onClick={() => navigate('/alumnos')}>
+        <button className="btn btn-secondary btn-sm" onClick={() => navigate(-1)}>
           <ArrowLeft className="icon-sm" />
           Volver
         </button>
       }
     >
-      <div className="card mb20" style={{ overflow: 'hidden' }}>
-        <div style={{ background: 'linear-gradient(135deg,var(--navy) 0%,var(--blue) 100%)', padding: '18px 24px', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-          <Avatar size="lg" initials="SR" style={{ width: 56, height: 56, fontSize: 20 }} />
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 17, fontWeight: 700, color: 'white' }}>Sofía Valentina Ramírez Torres</div>
-            <div style={{ fontSize: 12, color: 'rgba(255,255,255,.65)' }}>Boleta: 2023630045 · Grupo 4BM1 · 2026/1</div>
-          </div>
-          <div style={{ display: 'flex', gap: 20, textAlign: 'center', flexWrap: 'wrap' }}>
-            <div>
-              <div style={{ fontSize: 22, fontWeight: 700, color: 'white' }}>9.1</div>
-              <div style={{ fontSize: 11, color: 'rgba(255,255,255,.6)' }}>Promedio</div>
-            </div>
-            <div style={{ borderLeft: '1px solid rgba(255,255,255,.2)', paddingLeft: 20 }}>
-              <div style={{ fontSize: 22, fontWeight: 700, color: 'white' }}>8/10</div>
-              <div style={{ fontSize: 11, color: 'rgba(255,255,255,.6)' }}>Entregadas</div>
-            </div>
-          </div>
+      {loading ? (
+        <div style={{ padding: 48, textAlign: 'center' }}>
+          <Loader2 className="icon-xl spin" style={{ color: 'var(--blue)' }} />
         </div>
-        <div style={{ padding: '14px 24px', background: 'white', display: 'flex', gap: 20, fontSize: 13, flexWrap: 'wrap' }}>
-          <span>
-            <strong style={{ color: 'var(--navy)' }}>Materia:</strong> Teoría de la Computación
-          </span>
-          <span>
-            <strong style={{ color: 'var(--navy)' }}>Práctica:</strong> Equipo Alfa
-          </span>
-          <span>
-            <strong style={{ color: 'var(--navy)' }}>Tarea:</strong> Grupo T1
-          </span>
-          <span>
-            <strong style={{ color: 'var(--navy)' }}>Proyecto:</strong> Sigma
-          </span>
-        </div>
-      </div>
+      ) : error ? (
+        <div style={{ padding: 24, color: 'var(--red)', fontSize: 13 }}>{error}</div>
+      ) : (
+        <>
+          <div className="card mb20" style={{ overflow: 'hidden' }}>
+            <div
+              style={{
+                background: 'linear-gradient(135deg,var(--navy) 0%,var(--blue) 100%)',
+                padding: '18px 24px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 16,
+                flexWrap: 'wrap',
+              }}
+            >
+              <Avatar size="lg" initials={iniciales(alumno)} style={{ width: 56, height: 56, fontSize: 20 }} />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 17, fontWeight: 700, color: 'white' }}>
+                  {alumno.nombre} {alumno.apellido_paterno} {alumno.apellido_materno ?? ''}
+                </div>
+                <div style={{ fontSize: 12, color: 'rgba(255,255,255,.65)' }}>
+                  Boleta: {alumno.boleta} · Grupo {alumno.grupo}
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 20, textAlign: 'center', flexWrap: 'wrap' }}>
+                <div>
+                  <div style={{ fontSize: 22, fontWeight: 700, color: 'white' }}>
+                    {promedio !== null ? promedio.toFixed(1) : '—'}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,.6)' }}>Promedio</div>
+                </div>
+                <div style={{ borderLeft: '1px solid rgba(255,255,255,.2)', paddingLeft: 20 }}>
+                  <div style={{ fontSize: 22, fontWeight: 700, color: 'white' }}>
+                    {entregadas}/{actividades.length}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,.6)' }}>Entregadas</div>
+                </div>
+              </div>
+            </div>
+          </div>
 
-      <div className="card">
-        <div className="card-header">
-          <span className="card-title">Historial de actividades</span>
-        </div>
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Actividad</th>
-                <th>Tipo</th>
-                <th>Equipo</th>
-                <th>Cal. Equipo</th>
-                <th>Cal. Individual</th>
-                <th>Estatus</th>
-                <th>Fecha entrega</th>
-              </tr>
-            </thead>
-            <tbody>
-              {ACTIVIDADES.map((a) => (
-                <tr key={a.nombre}>
-                  <td className="td-bold">{a.nombre}</td>
-                  <td>
-                    <Badge variant={a.tipoVariant}>{a.tipo}</Badge>
-                  </td>
-                  <td>{a.equipo}</td>
-                  <td>{a.calEquipo}</td>
-                  <td className={a.calIndividual === '—' ? '' : 'td-bold'} style={{ color: a.calColor }}>
-                    {a.calIndividual}
-                  </td>
-                  <td>
-                    <Badge variant={a.estatusVariant}>{a.estatus}</Badge>
-                  </td>
-                  <td className="text-sm">{a.fecha}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+          <div className="card">
+            <div className="card-header">
+              <span className="card-title">Historial de actividades</span>
+            </div>
+            <div className="table-wrap">
+              {actividades.length === 0 ? (
+                <EmptyState
+                  icon={ClipboardList}
+                  title="Sin actividades registradas"
+                  description="Este alumno todavía no tiene actividades publicadas en tus materias."
+                />
+              ) : (
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Actividad</th>
+                      <th>Tipo</th>
+                      <th>Equipo</th>
+                      <th>Calificación</th>
+                      <th>Estatus</th>
+                      <th>Fecha entrega</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {actividades.map((a) => (
+                      <tr key={a.id_actividad}>
+                        <td className="td-bold">{a.titulo}</td>
+                        <td>
+                          <Badge variant={VARIANT_TIPO[a.tipo] ?? 'gray'}>{a.tipo}</Badge>
+                        </td>
+                        <td>{a.equipo_nombre ?? '—'}</td>
+                        <td className={a.nota !== null ? 'td-bold' : ''}>
+                          {a.nota !== null ? Number(a.nota).toFixed(1) : '—'}
+                          {a.individual ? (
+                            <span className="text-xs" style={{ color: 'var(--gray-400)', marginLeft: 4 }}>
+                              (individual)
+                            </span>
+                          ) : null}
+                        </td>
+                        <td>
+                          <Badge variant={VARIANT_ESTATUS[a.estatus_entrega] ?? 'gray'}>
+                            {a.estatus_entrega ?? 'Sin entregar'}
+                          </Badge>
+                        </td>
+                        <td className="text-sm">
+                          {a.fecha_entrega ? new Date(a.fecha_entrega).toLocaleDateString('es-MX') : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </>
+      )}
     </PageWrapper>
   )
 }
