@@ -268,7 +268,7 @@ solo íconos `lucide-react`. Tarjetas con sombra suave (`--shadow`) y `border-ra
 | S3 | Seeds completos | ✅ Completa | 0cfe125 |
 | S4 | Materias | ✅ Completa | dbe3181 |
 | S5 | Alumnos + importación Excel | ✅ Completa | 111f853 |
-| S6 | Equipos + asignación aleatoria masiva | ⏳ Pendiente | — |
+| S6 | Equipos + asignación aleatoria masiva | ✅ Completa | 302011c |
 | S7 | Actividades + publicación programada | ⏳ Pendiente | — |
 | S8 | Entregas | ⏳ Pendiente | — |
 | S9 | Calificaciones | ⏳ Pendiente | — |
