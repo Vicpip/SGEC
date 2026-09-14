@@ -267,7 +267,7 @@ solo íconos `lucide-react`. Tarjetas con sombra suave (`--shadow`) y `border-ra
 | S2 | Semestres + Gestión de Usuarios/Profesores + Sidebar Admin | ✅ Completa | ec5a5e8 |
 | S3 | Seeds completos | ✅ Completa | 0cfe125 |
 | S4 | Materias | ✅ Completa | dbe3181 |
-| S5 | Alumnos + importación Excel | ⏳ Pendiente | — |
+| S5 | Alumnos + importación Excel | ✅ Completa | 111f853 |
 | S6 | Equipos + asignación aleatoria masiva | ⏳ Pendiente | — |
 | S7 | Actividades + publicación programada | ⏳ Pendiente | — |
 | S8 | Entregas | ⏳ Pendiente | — |
