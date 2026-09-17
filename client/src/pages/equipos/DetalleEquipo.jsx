@@ -1,9 +1,9 @@
 // Pantalla 06 — Detalle del Equipo
 // Rol: Profesor
 // URL: /equipos/:id
-// Descripción: Integrantes del equipo. Las calificaciones y actividades del equipo se
-// habilitan en las Sesiones 7 (Actividades) y 9 (Calificaciones) — aquí solo se muestra
-// información de equipo/integrantes, ya conectada a la API real.
+// Descripción: Integrantes del equipo y sus calificaciones por actividad. Esta vista es
+// SOLO LECTURA para calificaciones — el registro y ajuste ocurre únicamente en
+// BandejaEntregas.jsx (Sesión 9, fuente canónica).
 
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
@@ -14,6 +14,10 @@ import Avatar from '../../components/ui/Avatar'
 import EmptyState from '../../components/ui/EmptyState'
 import * as equiposService from '../../services/equipos.service'
 import * as alumnosService from '../../services/alumnos.service'
+import * as calificacionesService from '../../services/calificaciones.service'
+
+const TIPO_ACTIVIDAD_VARIANT = { 'En clase': 'gray', Practica: 'blue', Tarea: 'navy', Proyecto: 'orange' }
+const TIPO_ACTIVIDAD_LABEL = { 'En clase': 'En clase', Practica: 'Práctica', Tarea: 'Tarea', Proyecto: 'Proyecto' }
 
 const TIPO_VARIANT = { Practica: 'blue', Tarea: 'navy', Proyecto: 'orange' }
 const TIPO_LABEL = { Practica: 'Práctica', Tarea: 'Tarea', Proyecto: 'Proyecto' }
@@ -41,6 +45,7 @@ export default function DetalleEquipo() {
   const [alumnosMateria, setAlumnosMateria] = useState([])
   const [equiposMateria, setEquiposMateria] = useState([])
   const [guardando, setGuardando] = useState(false)
+  const [actividadesCalificadas, setActividadesCalificadas] = useState([])
 
   function cargar() {
     setLoading(true)
@@ -55,6 +60,11 @@ export default function DetalleEquipo() {
         setEquipo(null)
       })
       .finally(() => setLoading(false))
+
+    calificacionesService
+      .listarCalificacionesDeEquipo(id)
+      .then((data) => setActividadesCalificadas(data.actividades))
+      .catch(() => setActividadesCalificadas([]))
   }
 
   useEffect(() => {
@@ -271,13 +281,60 @@ export default function DetalleEquipo() {
 
       <div className="card">
         <div className="card-header">
-          <span className="card-title">Actividades del equipo</span>
+          <span className="card-title">Actividades y calificaciones del equipo</span>
         </div>
-        <EmptyState
-          icon={ClipboardList}
-          title="Disponible próximamente"
-          description="Las actividades y calificaciones del equipo se conectan en las siguientes sesiones del sprint (Actividades y Calificaciones)."
-        />
+        {actividadesCalificadas.length === 0 ? (
+          <EmptyState
+            icon={ClipboardList}
+            title="Sin actividades todavía"
+            description="Cuando el profesor publique actividades para este equipo, aparecerán aquí con su calificación."
+          />
+        ) : (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Actividad</th>
+                  <th>Tipo</th>
+                  <th>Integrante</th>
+                  <th>Nota</th>
+                </tr>
+              </thead>
+              <tbody>
+                {actividadesCalificadas.flatMap((act) =>
+                  equipo.integrantes.map((it) => {
+                    const cal = act.calificaciones.find((c) => c.id_alumno === it.id_alumno)
+                    return (
+                      <tr key={`${act.id_actividad}-${it.id_alumno}`}>
+                        <td className="td-bold">{act.titulo}</td>
+                        <td>
+                          <Badge variant={TIPO_ACTIVIDAD_VARIANT[act.tipo] ?? 'gray'}>{TIPO_ACTIVIDAD_LABEL[act.tipo] ?? act.tipo}</Badge>
+                        </td>
+                        <td>
+                          {it.nombre} {it.apellido_paterno}
+                        </td>
+                        <td>
+                          {cal ? (
+                            <span style={{ fontWeight: 700, color: 'var(--navy)' }}>
+                              {Number(cal.nota).toFixed(1)}
+                              {cal.individual && (
+                                <Badge variant="orange" style={{ marginLeft: 8 }}>
+                                  Individual
+                                </Badge>
+                              )}
+                            </span>
+                          ) : (
+                            <span style={{ color: 'var(--gray-400)' }}>—</span>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </PageWrapper>
   )

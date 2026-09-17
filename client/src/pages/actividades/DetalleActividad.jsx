@@ -1,9 +1,9 @@
 // Pantalla 10 — Detalle de Actividad
 // Rol: Profesor
 // URL: /actividades/:id
-// Descripción: Información completa de la actividad publicada y sus archivos adjuntos.
-// Las entregas y calificaciones se conectan en las Sesiones 8 y 9 del sprint; aquí solo se
-// muestra información de la actividad, ya conectada a la API real.
+// Descripción: Información completa de la actividad publicada, sus archivos adjuntos y las
+// calificaciones por equipo e integrante. Esta vista es SOLO LECTURA — el registro y ajuste
+// de calificaciones ocurre únicamente en BandejaEntregas.jsx (Sesión 9, fuente canónica).
 
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
@@ -12,6 +12,11 @@ import PageWrapper from '../../components/layout/PageWrapper'
 import Badge from '../../components/ui/Badge'
 import EmptyState from '../../components/ui/EmptyState'
 import * as actividadesService from '../../services/actividades.service'
+import * as entregasService from '../../services/entregas.service'
+
+function nombreCompleto(persona) {
+  return `${persona.nombre} ${persona.apellido_paterno} ${persona.apellido_materno ?? ''}`.trim()
+}
 
 const TIPO_VARIANT = { 'En clase': 'gray', Practica: 'blue', Tarea: 'navy', Proyecto: 'orange' }
 const TIPO_LABEL = { 'En clase': 'En clase', Practica: 'Práctica', Tarea: 'Tarea', Proyecto: 'Proyecto' }
@@ -27,6 +32,7 @@ export default function DetalleActividad() {
   const [actividad, setActividad] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [equiposCalificaciones, setEquiposCalificaciones] = useState([])
 
   useEffect(() => {
     setLoading(true)
@@ -38,6 +44,11 @@ export default function DetalleActividad() {
       })
       .catch((err) => setError(err.response?.data?.error || 'No se pudo cargar la actividad'))
       .finally(() => setLoading(false))
+
+    entregasService
+      .listarEntregasDeActividad(id)
+      .then((data) => setEquiposCalificaciones(data.equipos))
+      .catch(() => setEquiposCalificaciones([]))
   }, [id])
 
   if (loading) {
@@ -171,11 +182,54 @@ export default function DetalleActividad() {
         <div className="card-header">
           <span className="card-title">Calificaciones por equipo e integrante</span>
         </div>
-        <EmptyState
-          icon={ClipboardList}
-          title="Disponible próximamente"
-          description="Las entregas y calificaciones se conectan en las siguientes sesiones del sprint (Entregas y Calificaciones)."
-        />
+        {equiposCalificaciones.length === 0 ? (
+          <EmptyState
+            icon={ClipboardList}
+            title="Sin equipos objetivo"
+            description="Esta actividad todavía no tiene equipos ni integrantes asociados."
+          />
+        ) : (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Equipo</th>
+                  <th>Integrante</th>
+                  <th>Boleta</th>
+                  <th>Nota</th>
+                  <th>Tipo</th>
+                </tr>
+              </thead>
+              <tbody>
+                {equiposCalificaciones.flatMap((eq) =>
+                  eq.integrantes.map((it) => (
+                    <tr key={`${eq.id_equipo}-${it.id_alumno}`}>
+                      <td className="td-bold">{eq.nombre}</td>
+                      <td>{nombreCompleto(it)}</td>
+                      <td>{it.boleta}</td>
+                      <td>
+                        {it.calificacion ? (
+                          <span style={{ fontWeight: 700, color: 'var(--navy)' }}>{Number(it.calificacion.nota).toFixed(1)}</span>
+                        ) : (
+                          <span style={{ color: 'var(--gray-400)' }}>—</span>
+                        )}
+                      </td>
+                      <td>
+                        {it.calificacion ? (
+                          <Badge variant={it.calificacion.individual ? 'orange' : 'blue'}>
+                            {it.calificacion.individual ? 'Ajuste individual' : 'Grupal'}
+                          </Badge>
+                        ) : (
+                          <Badge variant="red">Sin calificar</Badge>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </PageWrapper>
   )

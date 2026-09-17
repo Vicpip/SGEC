@@ -1,17 +1,19 @@
 // Pantalla 16 — Bandeja de Entregas
 // Rol: Profesor
 // URL: /actividades/:id/entregas
-// Descripción: Revisión de las entregas recibidas por equipo e integrante. El registro de
-// calificaciones (Sesión 9) es la única pieza que falta: esta pantalla ya muestra el estatus,
-// los archivos y el comentario reales de cada entrega.
+// Descripción: Revisión de las entregas recibidas por equipo e integrante. Fuente canónica
+// del registro de calificaciones (Sesión 9): califica al equipo completo de una vez (nota
+// grupal) y permite ajustar la nota de un integrante en específico (individual = TRUE) sin
+// tocar a sus compañeros. DetalleEquipo.jsx y DetalleActividad.jsx solo leen el resultado.
 
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Search, Archive, Inbox, MessageSquare, User, Users, ChevronRight, Loader2 } from 'lucide-react'
+import { ArrowLeft, Search, Archive, Inbox, MessageSquare, User, Users, ChevronRight, Loader2, Award, Pencil, Check, X } from 'lucide-react'
 import PageWrapper from '../../components/layout/PageWrapper'
 import Badge from '../../components/ui/Badge'
 import Avatar from '../../components/ui/Avatar'
 import * as entregasService from '../../services/entregas.service'
+import * as calificacionesService from '../../services/calificaciones.service'
 
 const TIPO_LABEL = { 'En clase': 'En clase', Practica: 'Práctica', Tarea: 'Tarea', Proyecto: 'Proyecto' }
 
@@ -55,9 +57,15 @@ export default function BandejaEntregas() {
   const [filtroEquipo, setFiltroEquipo] = useState('')
   const [filtroEstatus, setFiltroEstatus] = useState('')
 
-  useEffect(() => {
+  const [notaGrupal, setNotaGrupal] = useState({})
+  const [guardandoGrupal, setGuardandoGrupal] = useState(null)
+  const [editandoIndividual, setEditandoIndividual] = useState(null)
+  const [notaIndividual, setNotaIndividual] = useState({ nota: '', comentario: '' })
+  const [guardandoIndividual, setGuardandoIndividual] = useState(false)
+
+  function cargar() {
     setLoading(true)
-    entregasService
+    return entregasService
       .listarEntregasDeActividad(id)
       .then((data) => {
         setDatos(data)
@@ -65,7 +73,68 @@ export default function BandejaEntregas() {
       })
       .catch((err) => setError(err.response?.data?.error || 'No se pudieron cargar las entregas'))
       .finally(() => setLoading(false))
+  }
+
+  useEffect(() => {
+    cargar()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
+
+  function actualizarNotaGrupal(idEquipo, campo, valor) {
+    setNotaGrupal((prev) => ({ ...prev, [idEquipo]: { ...prev[idEquipo], [campo]: valor } }))
+  }
+
+  async function handleRegistrarGrupal(idEquipo) {
+    const form = notaGrupal[idEquipo] || {}
+    const nota = Number(form.nota)
+    if (form.nota === undefined || form.nota === '' || Number.isNaN(nota) || nota < 0 || nota > 10) {
+      setError('La calificación grupal debe ser un número entre 0 y 10')
+      return
+    }
+    setGuardandoGrupal(idEquipo)
+    setError('')
+    try {
+      await calificacionesService.registrarCalificacion({
+        id_actividad: Number(id),
+        id_equipo: idEquipo,
+        nota,
+        comentario: form.comentario || '',
+      })
+      setNotaGrupal((prev) => ({ ...prev, [idEquipo]: { nota: '', comentario: '' } }))
+      await cargar()
+    } catch (err) {
+      setError(err.response?.data?.error || 'No se pudo registrar la calificación grupal')
+    } finally {
+      setGuardandoGrupal(null)
+    }
+  }
+
+  function iniciarAjusteIndividual(it) {
+    setEditandoIndividual(it.id_alumno)
+    setNotaIndividual({ nota: it.calificacion?.nota ?? '', comentario: it.calificacion?.comentario ?? '' })
+  }
+
+  async function handleAjustarIndividual(it) {
+    const nota = Number(notaIndividual.nota)
+    if (notaIndividual.nota === '' || Number.isNaN(nota) || nota < 0 || nota > 10) {
+      setError('La calificación individual debe ser un número entre 0 y 10')
+      return
+    }
+    setGuardandoIndividual(true)
+    setError('')
+    try {
+      await calificacionesService.ajustarCalificacionIndividual(it.calificacion.id_calificacion, {
+        nota,
+        comentario: notaIndividual.comentario || '',
+      })
+      setEditandoIndividual(null)
+      await cargar()
+    } catch (err) {
+      setError(err.response?.data?.error || 'No se pudo ajustar la calificación individual')
+    } finally {
+      setGuardandoIndividual(false)
+    }
+  }
 
   const toggleEquipo = (idEquipo) => {
     setExpandidos((prev) => {
@@ -240,6 +309,49 @@ export default function BandejaEntregas() {
 
               {expandido && (
                 <div className="accordion-panel">
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      flexWrap: 'wrap',
+                      padding: '12px 16px',
+                      marginBottom: 12,
+                      background: 'var(--blue-light)',
+                      borderRadius: 10,
+                    }}
+                  >
+                    <Award className="icon-sm" style={{ color: 'var(--blue)' }} />
+                    <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--gray-800)' }}>Calificación grupal</span>
+                    <input
+                      type="number"
+                      min={0}
+                      max={10}
+                      step={0.1}
+                      className="form-control"
+                      style={{ width: 90 }}
+                      placeholder="Nota"
+                      value={notaGrupal[equipo.id_equipo]?.nota ?? ''}
+                      onChange={(e) => actualizarNotaGrupal(equipo.id_equipo, 'nota', e.target.value)}
+                    />
+                    <input
+                      type="text"
+                      className="form-control"
+                      style={{ flex: '1 1 200px', minWidth: 160 }}
+                      placeholder="Comentario (opcional)"
+                      value={notaGrupal[equipo.id_equipo]?.comentario ?? ''}
+                      onChange={(e) => actualizarNotaGrupal(equipo.id_equipo, 'comentario', e.target.value)}
+                    />
+                    <button
+                      className="btn btn-primary btn-sm"
+                      onClick={() => handleRegistrarGrupal(equipo.id_equipo)}
+                      disabled={guardandoGrupal === equipo.id_equipo}
+                    >
+                      {guardandoGrupal === equipo.id_equipo ? <Loader2 className="icon-sm spin" /> : <Check className="icon-sm" />}
+                      Registrar para el equipo
+                    </button>
+                  </div>
+
                   {equipo.integrantes.map((it) => {
                     const est = estatusIntegrante(it.entrega)
                     return (
@@ -308,6 +420,71 @@ export default function BandejaEntregas() {
                             <span style={{ fontSize: 13, color: 'var(--gray-400)' }}>Sin comentarios</span>
                           )}
                         </div>
+
+                        <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--gray-200)' }}>
+                          <div className="entrega-section-label">Calificación</div>
+                          {editandoIndividual === it.id_alumno ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                              <input
+                                type="number"
+                                min={0}
+                                max={10}
+                                step={0.1}
+                                className="form-control"
+                                style={{ width: 90 }}
+                                value={notaIndividual.nota}
+                                onChange={(e) => setNotaIndividual((prev) => ({ ...prev, nota: e.target.value }))}
+                              />
+                              <input
+                                type="text"
+                                className="form-control"
+                                style={{ flex: '1 1 200px', minWidth: 160 }}
+                                placeholder="Comentario (opcional)"
+                                value={notaIndividual.comentario}
+                                onChange={(e) => setNotaIndividual((prev) => ({ ...prev, comentario: e.target.value }))}
+                              />
+                              <button
+                                className="btn btn-primary btn-sm"
+                                onClick={() => handleAjustarIndividual(it)}
+                                disabled={guardandoIndividual}
+                              >
+                                {guardandoIndividual ? <Loader2 className="icon-sm spin" /> : <Check className="icon-sm" />}
+                                Guardar
+                              </button>
+                              <button
+                                className="btn btn-secondary btn-sm"
+                                onClick={() => setEditandoIndividual(null)}
+                                disabled={guardandoIndividual}
+                              >
+                                <X className="icon-sm" />
+                              </button>
+                            </div>
+                          ) : (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                              {it.calificacion ? (
+                                <>
+                                  <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--navy)' }}>
+                                    {Number(it.calificacion.nota).toFixed(1)}
+                                  </span>
+                                  <Badge variant={it.calificacion.individual ? 'orange' : 'blue'}>
+                                    {it.calificacion.individual ? 'Ajuste individual' : 'Grupal'}
+                                  </Badge>
+                                </>
+                              ) : (
+                                <span style={{ fontSize: 13, color: 'var(--gray-400)' }}>Sin calificar</span>
+                              )}
+                              <button
+                                className="btn btn-secondary btn-sm"
+                                onClick={() => iniciarAjusteIndividual(it)}
+                                disabled={!it.calificacion}
+                                title={!it.calificacion ? 'Registra primero la calificación grupal del equipo' : 'Ajustar solo a este alumno'}
+                              >
+                                <Pencil className="icon-sm" />
+                                Ajustar individual
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     )
                   })}
@@ -325,7 +502,6 @@ export default function BandejaEntregas() {
         <span style={{ fontSize: 12, color: 'var(--gray-600)' }}>
           {totalEntregados} de {totalIntegrantes} entregas recibidas · {totalCalificados} calificadas · {totalIntegrantes - totalEntregados} pendientes
         </span>
-        <span style={{ fontSize: 12, color: 'var(--gray-600)', fontStyle: 'italic' }}>El registro de calificaciones estará disponible en la Sesión 9</span>
       </div>
     </PageWrapper>
   )

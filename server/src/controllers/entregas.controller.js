@@ -172,6 +172,15 @@ async function listarPorActividad(req, res) {
   const entregaPorAlumno = new Map(entregasRows.map((e) => [e.id_alumno, e]))
   const archivosPorEntrega = await archivosDeEntregas(entregasRows.map((e) => e.id_entrega))
 
+  // Se incluye aquí (y no solo en /api/calificaciones) porque BandejaEntregas.jsx —fuente
+  // canónica del registro de notas, Sesión 9— y DetalleActividad.jsx (solo lectura) leen
+  // el roster de integrantes y su calificación desde esta misma respuesta.
+  const [calificacionesRows] = await pool.query(
+    'SELECT id_calificacion, id_alumno, nota, individual, comentario FROM calificacion WHERE id_actividad = ?',
+    [idActividad]
+  )
+  const calificacionPorAlumno = new Map(calificacionesRows.map((c) => [c.id_alumno, c]))
+
   const equiposConIntegrantes = equipos.map((eq) => ({
     id_equipo: eq.id_equipo,
     nombre: eq.nombre,
@@ -179,6 +188,7 @@ async function listarPorActividad(req, res) {
       .filter((it) => it.id_equipo === eq.id_equipo)
       .map((it) => {
         const entrega = entregaPorAlumno.get(it.id_alumno)
+        const calificacion = calificacionPorAlumno.get(it.id_alumno)
         return {
           id_alumno: it.id_alumno,
           boleta: it.boleta,
@@ -192,6 +202,14 @@ async function listarPorActividad(req, res) {
                 estatus: entrega.estatus,
                 fecha_entrega: entrega.fecha_entrega,
                 archivos: archivosPorEntrega.get(entrega.id_entrega) ?? [],
+              }
+            : null,
+          calificacion: calificacion
+            ? {
+                id_calificacion: calificacion.id_calificacion,
+                nota: calificacion.nota,
+                individual: !!calificacion.individual,
+                comentario: calificacion.comentario,
               }
             : null,
         }
