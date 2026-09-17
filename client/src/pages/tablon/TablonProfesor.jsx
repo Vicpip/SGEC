@@ -1,42 +1,105 @@
 // Pantalla 18 — Tablón de Avisos
 // Rol: Profesor
 // URL: /tablon
-// Descripción: Publicación de avisos dirigidos a una materia o a todas las materias del profesor.
+// Descripción: Publicación de avisos dirigidos a una materia o a todas las materias ACTIVAS
+// del profesor (selector "Todas mis materias" → id_materia = NULL en el backend).
 
-import { Plus, Paperclip, FileText, X, Megaphone, Pencil, Trash2 } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Plus, Paperclip, FileText, X, Megaphone, Loader2 } from 'lucide-react'
 import PageWrapper from '../../components/layout/PageWrapper'
+import { useAuth } from '../../hooks/useAuth'
+import * as materiasService from '../../services/materias.service'
+import * as avisosService from '../../services/avisos.service'
 
-const AVISOS = [
-  {
-    titulo: 'Cambio de aula: Práctica 5',
-    materia: 'Teoría de la Computación · Hoy, 09:12',
-    cuerpo: 'La práctica 5 se realizará en el Laboratorio 4, piso 2. Recuerden traer su laptop y el código de la práctica anterior.',
-    archivo: null,
-    badge: 'Teoría de la Computación',
-    variant: 'blue',
-    notificados: '32 alumnos notificados',
-  },
-  {
-    titulo: 'Semana de exámenes parciales',
-    materia: 'Todas las materias · Ayer, 15:40',
-    cuerpo: 'Los parciales serán del 28 de abril al 2 de mayo. Consulten el calendario académico oficial adjunto.',
-    archivo: 'calendario_parciales_2026.pdf',
-    badge: 'Todas las materias',
-    variant: 'navy',
-    notificados: '118 alumnos notificados',
-  },
-  {
-    titulo: 'Material de apoyo disponible',
-    materia: 'Sistemas Operativos · Hace 3 días',
-    cuerpo: 'Subí las diapositivas del tema de Planificación de Procesos al tablón.',
-    archivo: 'slides_planificacion_procesos.pptx',
-    badge: 'Sistemas Operativos',
-    variant: 'orange',
-    notificados: '28 alumnos notificados',
-  },
-]
+function iniciales(persona) {
+  return `${persona?.nombre?.[0] ?? ''}${persona?.apellido_paterno?.[0] ?? ''}`.toUpperCase()
+}
+
+function formatFecha(fecha) {
+  if (!fecha) return ''
+  return new Date(fecha).toLocaleString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+}
 
 export default function TablonProfesor() {
+  const { user } = useAuth()
+
+  const [materias, setMaterias] = useState([])
+  const [avisos, setAvisos] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  const [titulo, setTitulo] = useState('')
+  const [contenido, setContenido] = useState('')
+  const [idMateria, setIdMateria] = useState('todas')
+  const [archivos, setArchivos] = useState([])
+  const [publicando, setPublicando] = useState(false)
+
+  function cargarAvisos() {
+    setLoading(true)
+    return avisosService
+      .listarAvisos()
+      .then((data) => {
+        setAvisos(data)
+        setError('')
+      })
+      .catch((err) => setError(err.response?.data?.error || 'No se pudieron cargar los avisos'))
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => {
+    materiasService
+      .listarMaterias()
+      .then((data) => setMaterias(data.filter((m) => m.estatus !== 'Cerrada')))
+      .catch(() => setMaterias([]))
+    cargarAvisos()
+  }, [])
+
+  function handleArchivos(e) {
+    const nuevos = Array.from(e.target.files ?? [])
+    setArchivos((prev) => [...prev, ...nuevos])
+    e.target.value = ''
+  }
+
+  function quitarArchivo(nombre) {
+    setArchivos((prev) => prev.filter((f) => f.name !== nombre))
+  }
+
+  async function handlePublicar() {
+    setError('')
+
+    if (!titulo.trim()) {
+      setError('El título del aviso es requerido')
+      return
+    }
+    if (!contenido.trim()) {
+      setError('El mensaje del aviso es requerido')
+      return
+    }
+
+    const formData = new FormData()
+    formData.append('titulo', titulo.trim())
+    formData.append('contenido', contenido.trim())
+    if (idMateria !== 'todas') {
+      formData.append('id_materia', idMateria)
+    }
+    archivos.forEach((archivo) => formData.append('archivos', archivo))
+
+    setPublicando(true)
+    try {
+      await avisosService.crearAviso(formData)
+      setTitulo('')
+      setContenido('')
+      setIdMateria('todas')
+      setArchivos([])
+      await cargarAvisos()
+    } catch (err) {
+      const detalle = err.response?.data?.errores?.[0]
+      setError(detalle || err.response?.data?.error || 'No se pudo publicar el aviso')
+    } finally {
+      setPublicando(false)
+    }
+  }
+
   return (
     <PageWrapper title="Tablón de Avisos" actions={<div className="topbar-semester">2026/1</div>}>
       <div className="two-col">
@@ -48,43 +111,69 @@ export default function TablonProfesor() {
             </span>
           </div>
           <div className="card-body">
-            <div className="form-group">
-              <label className="form-label">Título del aviso</label>
-              <div className="form-control focused">Recordatorio: Examen parcial semana 14</div>
-            </div>
-            <div className="form-group">
-              <label className="form-label">Mensaje</label>
-              <div className="form-textarea">
-                Recuerden que el examen parcial del módulo de Lenguajes Regulares se llevará a cabo el próximo lunes 28 de abril en el aula B-204. Deben
-                traer su credencial vigente. El examen abarca los temas 4 al 7 del programa.
+            {error && (
+              <div className="login-error" style={{ marginBottom: 12 }}>
+                {error}
               </div>
+            )}
+            <div className="form-group">
+              <label className="form-label" htmlFor="titulo-aviso">
+                Título del aviso
+              </label>
+              <input
+                id="titulo-aviso"
+                className="form-control"
+                placeholder="Recordatorio: Examen parcial semana 14"
+                value={titulo}
+                onChange={(e) => setTitulo(e.target.value)}
+              />
             </div>
             <div className="form-group">
-              <label className="form-label">Dirigido a</label>
-              <select className="form-control" defaultValue="tc-401-4bm1">
+              <label className="form-label" htmlFor="contenido-aviso">
+                Mensaje
+              </label>
+              <textarea
+                id="contenido-aviso"
+                className="form-textarea"
+                placeholder="Escribe el contenido del aviso…"
+                value={contenido}
+                onChange={(e) => setContenido(e.target.value)}
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label" htmlFor="dirigido-a">
+                Dirigido a
+              </label>
+              <select id="dirigido-a" className="form-control" value={idMateria} onChange={(e) => setIdMateria(e.target.value)}>
                 <option value="todas">Todas mis materias</option>
-                <option value="tc-401-4bm1">Teoría de la Computación — 4BM1</option>
-                <option value="so-301-3bm2">Sistemas Operativos — 3BM2</option>
+                {materias.map((m) => (
+                  <option key={m.id_materia} value={m.id_materia}>
+                    {m.clave} — {m.nombre} · {m.grupo}
+                  </option>
+                ))}
               </select>
             </div>
             <div className="form-group">
               <label className="form-label">Adjuntar documentos</label>
-              <div className="dropzone" style={{ padding: 20, marginBottom: 8 }}>
+              <label className="dropzone" style={{ padding: 20, marginBottom: 8, cursor: 'pointer' }}>
                 <Paperclip style={{ width: 28, height: 28, color: 'var(--blue)' }} />
                 <p style={{ marginTop: 8, fontSize: 12 }}>Arrastra archivos o haz clic</p>
-              </div>
-              <div className="file-list-item">
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <FileText className="icon-sm" style={{ color: 'var(--blue)' }} />
-                  <span>temario_parcial_2_TC.pdf</span>
+                <input type="file" multiple hidden onChange={handleArchivos} />
+              </label>
+              {archivos.map((a) => (
+                <div key={a.name} className="file-list-item">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <FileText className="icon-sm" style={{ color: 'var(--blue)' }} />
+                    <span>{a.name}</span>
+                  </div>
+                  <div className="action-btn action-del" role="button" tabIndex={0} onClick={() => quitarArchivo(a.name)}>
+                    <X className="icon-sm" />
+                  </div>
                 </div>
-                <div className="action-btn action-del">
-                  <X className="icon-sm" />
-                </div>
-              </div>
+              ))}
             </div>
-            <button className="btn btn-primary w100" style={{ justifyContent: 'center' }}>
-              <Megaphone className="icon-sm" />
+            <button className="btn btn-primary w100" style={{ justifyContent: 'center' }} onClick={handlePublicar} disabled={publicando}>
+              {publicando ? <Loader2 className="icon-sm spin" /> : <Megaphone className="icon-sm" />}
               Publicar aviso
             </button>
           </div>
@@ -92,40 +181,48 @@ export default function TablonProfesor() {
 
         <div>
           <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--gray-600)', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 14 }}>
-            Avisos publicados (3)
+            Avisos publicados ({avisos.length})
           </div>
-          {AVISOS.map((av) => (
-            <div key={av.titulo} className="notice-card">
-              <div className="notice-header">
-                <div className="notice-avatar">MG</div>
-                <div className="notice-meta">
-                  <strong>{av.titulo}</strong>
-                  <span>{av.materia}</span>
-                </div>
-                <div className="actions">
-                  <div className="action-btn action-edit">
-                    <Pencil className="icon-sm" />
-                  </div>
-                  <div className="action-btn action-del">
-                    <Trash2 className="icon-sm" />
-                  </div>
-                </div>
-              </div>
-              <div className="notice-body">{av.cuerpo}</div>
-              {av.archivo && (
-                <div style={{ marginBottom: 10 }}>
-                  <span className="file-chip">
-                    <FileText className="icon-sm" />
-                    {av.archivo}
-                  </span>
-                </div>
-              )}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span className={`badge badge-${av.variant}`}>{av.badge}</span>
-                <span className="text-xs">{av.notificados}</span>
-              </div>
+          {loading ? (
+            <div style={{ padding: 48, textAlign: 'center' }}>
+              <Loader2 className="icon-xl spin" style={{ color: 'var(--blue)' }} />
             </div>
-          ))}
+          ) : avisos.length === 0 ? (
+            <div className="card">
+              <div style={{ padding: '32px 24px', textAlign: 'center', fontSize: 13, color: 'var(--gray-600)' }}>Aún no has publicado avisos</div>
+            </div>
+          ) : (
+            avisos.map((av) => (
+              <div key={av.id_aviso} className="notice-card">
+                <div className="notice-header">
+                  <div className="notice-avatar">{iniciales(user)}</div>
+                  <div className="notice-meta">
+                    <strong>{av.titulo}</strong>
+                    <span>
+                      {av.id_materia ? `${av.materia_clave} — ${av.materia_nombre}` : 'Todas mis materias'} · {formatFecha(av.fecha_publicacion)}
+                    </span>
+                  </div>
+                </div>
+                <div className="notice-body">{av.contenido}</div>
+                {av.archivos.length > 0 && (
+                  <div className="tag-row" style={{ marginBottom: 10 }}>
+                    {av.archivos.map((archivo) => (
+                      <span key={archivo.id_archivo_aviso} className="file-chip">
+                        <FileText className="icon-sm" />
+                        {archivo.nombre_archivo}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span className={`badge badge-${av.id_materia ? 'blue' : 'navy'}`}>
+                    {av.id_materia ? av.materia_clave : 'Todas mis materias'}
+                  </span>
+                  <span className="text-xs">{av.total_notificados} alumnos notificados</span>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </div>
     </PageWrapper>
