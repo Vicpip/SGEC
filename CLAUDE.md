@@ -270,7 +270,7 @@ solo íconos `lucide-react`. Tarjetas con sombra suave (`--shadow`) y `border-ra
 | S5 | Alumnos + importación Excel | ✅ Completa | 111f853 |
 | S6 | Equipos + asignación aleatoria masiva | ✅ Completa | 302011c |
 | S7 | Actividades + publicación programada | ✅ Completa | 2af81ef |
-| S8 | Entregas | ⏳ Pendiente | — |
+| S8 | Entregas | ✅ Completa | 80a8ae2 |
 | S9 | Calificaciones | ⏳ Pendiente | — |
 | S10 | Avisos / Tablón | ⏳ Pendiente | — |
 | S11 | Reportes | ⏳ Pendiente | — |
