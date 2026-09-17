@@ -25,7 +25,6 @@ import TablonProfesor from '../pages/tablon/TablonProfesor'
 import TablonAlumno from '../pages/tablon/TablonAlumno'
 import GestionProfesores from '../pages/admin/GestionProfesores'
 import GestionSemestres from '../pages/admin/GestionSemestres'
-import Configuracion from '../pages/admin/Configuracion'
 import MisEquipos from '../pages/alumno/MisEquipos'
 import MisActividades from '../pages/alumno/MisActividades'
 import MisCalificaciones from '../pages/alumno/MisCalificaciones'
@@ -133,10 +132,6 @@ export default function AppRouter() {
       <Route
         path="/admin/semestres"
         element={<ProtectedRoute roles={['Administrador']}><GestionSemestres /></ProtectedRoute>}
-      />
-      <Route
-        path="/admin/configuracion"
-        element={<ProtectedRoute roles={['Administrador']}><Configuracion /></ProtectedRoute>}
       />
 
       <Route

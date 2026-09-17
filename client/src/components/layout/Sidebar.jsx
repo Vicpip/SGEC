@@ -8,7 +8,6 @@ import {
   Megaphone,
   BarChart2,
   UserCog,
-  Settings,
   Award,
   CalendarRange,
   LogOut,
@@ -39,8 +38,10 @@ const ALUMNO_ITEMS = [
 
 // El Administrador no gestiona equipos/alumnos/actividades/avisos de una materia
 // específica (eso es de Profesor) — solo ve el catálogo de materias a nivel
-// institucional; sus acciones propias (Profesores, Semestres, Configuración)
-// viven en la sección "Administración" más abajo.
+// institucional; sus acciones propias (Profesores, Semestres) viven en la
+// sección "Administración" más abajo. "Configuración" se retiró en la Sesión 12
+// (auditoría de seguridad): era un placeholder sin alcance ni endpoint propio
+// desde que se creó — ver docs/SECURITY.md.
 const ADMIN_ITEMS = [{ key: 'materias', icon: BookOpen, label: 'Materias', to: '/materias' }]
 
 const AVATAR_BG_POR_ROL = {
@@ -125,7 +126,6 @@ export default function Sidebar({ open = false, onClose }) {
           <div className="sbl">Administración</div>
           <NavItem icon={UserCog} label="Profesores" to="/admin/profesores" onNavigate={handleNavigate} pathname={pathname} />
           <NavItem icon={CalendarRange} label="Semestres" to="/admin/semestres" onNavigate={handleNavigate} pathname={pathname} />
-          <NavItem icon={Settings} label="Configuración" to="/admin/configuracion" onNavigate={handleNavigate} pathname={pathname} />
         </div>
       )}
 

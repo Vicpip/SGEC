@@ -11,8 +11,12 @@ const REQUIRED_VARS = [
   'ALLOWED_EMAIL_DOMAINS',
 ]
 
+// Placeholder de server/.env.example: si llega tal cual a producción, el JWT es
+// falsificable por cualquiera que haya visto el repositorio.
+const JWT_SECRET_PLACEHOLDER = 'cambia_este_secreto_en_produccion'
+const JWT_SECRET_MIN_LENGTH = 32
+
 function validateEnv() {
-  const missing = REQUIRED_VARS.filter((key) => !process.env[key] && process.env[key] !== '')
   const trulyMissing = REQUIRED_VARS.filter((key) => process.env[key] === undefined)
 
   if (trulyMissing.length > 0) {
@@ -21,9 +25,21 @@ function validateEnv() {
     )
   }
 
+  const nodeEnv = process.env.NODE_ENV || 'development'
+  if (nodeEnv === 'production') {
+    if (
+      process.env.JWT_SECRET === JWT_SECRET_PLACEHOLDER ||
+      process.env.JWT_SECRET.length < JWT_SECRET_MIN_LENGTH
+    ) {
+      throw new Error(
+        `JWT_SECRET inseguro para producción: debe tener al menos ${JWT_SECRET_MIN_LENGTH} caracteres y no puede ser el placeholder de .env.example. Genera uno con: node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"`
+      )
+    }
+  }
+
   return {
     port: Number(process.env.PORT),
-    nodeEnv: process.env.NODE_ENV || 'development',
+    nodeEnv,
     db: {
       host: process.env.DB_HOST,
       port: Number(process.env.DB_PORT),

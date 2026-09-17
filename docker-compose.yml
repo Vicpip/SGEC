@@ -43,7 +43,10 @@ services:
       DB_PASSWORD: ${DB_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN}
+      UPLOAD_DIR: ${UPLOAD_DIR:-./uploads}
+      MAX_FILE_SIZE_MB: ${MAX_FILE_SIZE_MB:-20}
       ALLOWED_EMAIL_DOMAINS: ${ALLOWED_EMAIL_DOMAINS}
+      CLIENT_URL: ${CLIENT_URL}
     volumes:
       - sgec_uploads:/app/uploads
     depends_on:
