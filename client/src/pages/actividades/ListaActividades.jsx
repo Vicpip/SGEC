@@ -10,54 +10,191 @@
 // (Pantalla 15 — Publicar Actividad) y de /actividades/:id (Pantalla 10 — Detalle de
 // Actividad), que hasta ahora solo era alcanzable por URL directa.
 
-import { useNavigate } from 'react-router-dom'
-import { Plus } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { Plus, Loader2, ClipboardList, Users, User } from 'lucide-react'
 import PageWrapper from '../../components/layout/PageWrapper'
 import Badge from '../../components/ui/Badge'
+import EmptyState from '../../components/ui/EmptyState'
+import ActionButtons from '../../components/ui/ActionButtons'
+import * as materiasService from '../../services/materias.service'
+import * as actividadesService from '../../services/actividades.service'
 
-const ACTIVIDADES = [
-  { titulo: 'Práctica 3 — Autómatas', estatus: 'Pendiente', variant: 'yellow', detalle: 'Teoría de la Computación · 8 equipos' },
-  { titulo: 'Tarea 2 — Procesos', estatus: 'Calificada', variant: 'green', detalle: 'Sistemas Operativos · 7 equipos' },
-  { titulo: 'Proyecto Final — Etapa 1', estatus: 'En revisión', variant: 'blue', detalle: 'Redes de Computadoras · 5 equipos' },
-]
+const TIPO_VARIANT = { 'En clase': 'gray', Practica: 'blue', Tarea: 'navy', Proyecto: 'orange' }
+const TIPO_LABEL = { 'En clase': 'En clase', Practica: 'Práctica', Tarea: 'Tarea', Proyecto: 'Proyecto' }
+
+function formatFecha(fecha) {
+  return new Date(fecha).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })
+}
 
 export default function ListaActividades() {
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const claveMateria = searchParams.get('materia') ?? ''
+
+  const [materias, setMaterias] = useState([])
+  const [materia, setMateria] = useState(null)
+  const [actividades, setActividades] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    materiasService
+      .listarMaterias()
+      .then((data) => {
+        setMaterias(data)
+        if (!claveMateria && data[0]) {
+          setSearchParams({ materia: data[0].clave }, { replace: true })
+        }
+      })
+      .catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  function cargarActividades() {
+    if (!claveMateria) return
+    setLoading(true)
+    actividadesService
+      .listarActividades(claveMateria)
+      .then((data) => {
+        setActividades(data.actividades)
+        setMateria(data.materia)
+        setError('')
+      })
+      .catch((err) => {
+        setError(err.response?.data?.error || 'No se pudieron cargar las actividades')
+        setActividades([])
+        setMateria(null)
+      })
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => {
+    cargarActividades()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [claveMateria])
+
+  async function handleDesactivar(actividad) {
+    try {
+      await actividadesService.desactivarActividad(actividad.id_actividad)
+      cargarActividades()
+    } catch (err) {
+      setError(err.response?.data?.error || 'No se pudo desactivar la actividad')
+    }
+  }
 
   return (
     <PageWrapper
-      title="Actividades"
+      title={
+        materia ? (
+          <>
+            Actividades — {materia.nombre} <span style={{ fontWeight: 400, color: 'var(--gray-400)' }}>· {materia.grupo}</span>
+          </>
+        ) : (
+          'Actividades'
+        )
+      }
       actions={
-        <button className="btn btn-primary btn-sm" onClick={() => navigate('/actividades/nueva')}>
+        <button
+          className="btn btn-primary btn-sm"
+          onClick={() => navigate(`/actividades/nueva?materia=${claveMateria}`)}
+          disabled={!claveMateria}
+        >
           <Plus className="icon-sm" />
           Publicar actividad
         </button>
       }
     >
-      <div className="card">
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Actividad</th>
-                <th>Detalle</th>
-                <th>Estatus</th>
-              </tr>
-            </thead>
-            <tbody>
-              {ACTIVIDADES.map((a) => (
-                <tr key={a.titulo} className="clickable-row" onClick={() => navigate('/actividades/1')}>
-                  <td className="td-bold">{a.titulo}</td>
-                  <td>{a.detalle}</td>
-                  <td>
-                    <Badge variant={a.variant}>{a.estatus}</Badge>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {materias.length > 0 && (
+        <div className="toolbar">
+          <select
+            className="select-input"
+            value={claveMateria}
+            onChange={(e) => setSearchParams({ materia: e.target.value })}
+          >
+            {materias.map((m) => (
+              <option key={m.id_materia} value={m.clave}>
+                {m.clave} — {m.nombre} · {m.grupo}
+              </option>
+            ))}
+          </select>
         </div>
-      </div>
+      )}
+
+      {error && (
+        <div className="login-error" style={{ marginBottom: 16 }}>
+          {error}
+        </div>
+      )}
+
+      {loading ? (
+        <div style={{ padding: 48, textAlign: 'center' }}>
+          <Loader2 className="icon-xl spin" style={{ color: 'var(--blue)' }} />
+        </div>
+      ) : (
+        <div className="card">
+          {actividades.length === 0 ? (
+            <EmptyState
+              icon={ClipboardList}
+              title="Sin actividades publicadas"
+              description="Publica una actividad para esta materia desde el botón superior."
+            />
+          ) : (
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Actividad</th>
+                    <th>Tipo</th>
+                    <th>Dirigida a</th>
+                    <th>Entrega</th>
+                    <th>Fecha límite</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {actividades.map((a) => (
+                    <tr key={a.id_actividad} className="clickable-row" onClick={() => navigate(`/actividades/${a.id_actividad}`)}>
+                      <td className="td-bold">
+                        {a.titulo}
+                        {!!a.programada && (
+                          <span className="text-xs" style={{ color: 'var(--gray-400)', marginLeft: 6 }}>
+                            (programada)
+                          </span>
+                        )}
+                      </td>
+                      <td>
+                        <Badge variant={TIPO_VARIANT[a.tipo] ?? 'gray'}>{TIPO_LABEL[a.tipo] ?? a.tipo}</Badge>
+                      </td>
+                      <td className="text-sm">{a.todos_los_equipos ? 'Todos los equipos' : a.equipo_nombre ?? '—'}</td>
+                      <td>
+                        {a.entrega_por_equipo ? (
+                          <Badge variant="blue">
+                            <Users className="icon-sm" style={{ marginRight: 4 }} />
+                            Por equipo
+                          </Badge>
+                        ) : (
+                          <Badge variant="gray">
+                            <User className="icon-sm" style={{ marginRight: 4 }} />
+                            Individual
+                          </Badge>
+                        )}
+                      </td>
+                      <td className="text-sm">{formatFecha(a.fecha_limite)}</td>
+                      <td onClick={(e) => e.stopPropagation()}>
+                        <ActionButtons
+                          onView={() => navigate(`/actividades/${a.id_actividad}`)}
+                          onDelete={() => handleDesactivar(a)}
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
     </PageWrapper>
   )
 }
