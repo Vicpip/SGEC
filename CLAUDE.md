@@ -271,7 +271,7 @@ solo íconos `lucide-react`. Tarjetas con sombra suave (`--shadow`) y `border-ra
 | S6 | Equipos + asignación aleatoria masiva | ✅ Completa | 302011c |
 | S7 | Actividades + publicación programada | ✅ Completa | 2af81ef |
 | S8 | Entregas | ✅ Completa | 80a8ae2 |
-| S9 | Calificaciones | ⏳ Pendiente | — |
+| S9 | Calificaciones | ✅ Completa | 66c6cc8 |
 | S10 | Avisos / Tablón | ⏳ Pendiente | — |
 | S11 | Reportes | ⏳ Pendiente | — |
 | S12 | Auditoría de seguridad final y hardening | ⏳ Pendiente (antes oct 16, 2026) | — |
