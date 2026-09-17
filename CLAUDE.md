@@ -259,7 +259,7 @@ solo íconos `lucide-react`. Tarjetas con sombra suave (`--shadow`) y `border-ra
 
 ## Estado actual del proyecto
 
-**Sprint backend (septiembre 2026)** — plan de 12 sesiones de implementación en curso.
+**Sprint backend (septiembre 2026)** — plan de 12 sesiones de implementación completado.
 
 | Sesión | Tema | Estado | Commit |
 |--------|------|--------|--------|
@@ -274,10 +274,17 @@ solo íconos `lucide-react`. Tarjetas con sombra suave (`--shadow`) y `border-ra
 | S9 | Calificaciones | ✅ Completa | 66c6cc8 |
 | S10 | Avisos / Tablón | ✅ Completa | 4307c63 |
 | S11 | Reportes | ✅ Completa | 3e55ede |
-| S12 | Auditoría de seguridad final y hardening | ⏳ Pendiente (antes oct 16, 2026) | — |
+| S12 | Auditoría de seguridad final y hardening | ✅ Completa | 109daaf |
 
-**Pendientes transversales (resolver en Sesión 12):**
-- (ninguno por ahora — el hallazgo de multer se resolvió en S5, ver nota debajo)
+**Pendientes transversales:** ninguno bloqueante. Queda documentado como trabajo pendiente para
+una sesión futura (fuera del alcance "sin features nuevas" de S12, ver `docs/SECURITY.md`):
+- Reemplazar `email.service.js` (stub que solo hace `console.log`) por un proveedor SMTP real
+  antes de manejar contraseñas de usuarios reales en producción.
+- Agregar un endpoint de descarga para `archivo_actividad`/`archivo_entrega`/`archivo_aviso`
+  (hoy se referencian en la base de datos pero no hay ninguna ruta que sirva el archivo).
+
+Documentación técnica completa en `docs/`: `ARQUITECTURA.md`, `API.md`, `SECURITY.md`,
+`DEPLOYMENT.md`.
 
 ## Instrucciones por sesión
 
