@@ -273,7 +273,7 @@ solo íconos `lucide-react`. Tarjetas con sombra suave (`--shadow`) y `border-ra
 | S8 | Entregas | ✅ Completa | 80a8ae2 |
 | S9 | Calificaciones | ✅ Completa | 66c6cc8 |
 | S10 | Avisos / Tablón | ✅ Completa | 4307c63 |
-| S11 | Reportes | ⏳ Pendiente | — |
+| S11 | Reportes | ✅ Completa | 3e55ede |
 | S12 | Auditoría de seguridad final y hardening | ⏳ Pendiente (antes oct 16, 2026) | — |
 
 **Pendientes transversales (resolver en Sesión 12):**
