@@ -47,6 +47,8 @@ services:
       MAX_FILE_SIZE_MB: ${MAX_FILE_SIZE_MB:-20}
       ALLOWED_EMAIL_DOMAINS: ${ALLOWED_EMAIL_DOMAINS}
       CLIENT_URL: ${CLIENT_URL}
+    ports:
+      - "3001:3001"
     volumes:
       - sgec_uploads:/app/uploads
     depends_on:
@@ -64,6 +66,8 @@ services:
         VITE_API_URL: ${VITE_API_URL}
     container_name: sgec_client
     restart: always
+    ports:
+      - "80:80"
     networks:
       - sgec_net
 

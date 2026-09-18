@@ -1,3 +1,5 @@
+SET NAMES utf8mb4;
+
 -- ============================================================================
 -- Seed: profesor adicional + materias de prueba
 -- Contraseña en claro (solo desarrollo): Profesor1234!

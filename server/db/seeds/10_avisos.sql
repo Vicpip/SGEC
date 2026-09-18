@@ -1,3 +1,5 @@
+SET NAMES utf8mb4;
+
 -- ============================================================================
 -- Seed: avisos (uno por materia específica, uno global para el profesor
 -- con múltiples materias activas)

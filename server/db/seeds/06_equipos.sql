@@ -1,3 +1,5 @@
+SET NAMES utf8mb4;
+
 -- ============================================================================
 -- Seed: equipos (Practica/Tarea/Proyecto) e integrantes
 -- Practica y Tarea comparten integrantes (una fila por tipo, mismos alumnos);

@@ -1,3 +1,5 @@
+SET NAMES utf8mb4;
+
 -- ============================================================================
 -- Seed: usuario Administrador de prueba
 -- Contraseña en claro (solo desarrollo): Admin1234!

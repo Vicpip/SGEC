@@ -1,3 +1,5 @@
+SET NAMES utf8mb4;
+
 -- ============================================================================
 -- Seed: usuario Profesor de prueba
 -- Contraseña en claro (solo desarrollo): Profesor1234!

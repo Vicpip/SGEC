@@ -1,3 +1,5 @@
+SET NAMES utf8mb4;
+
 -- ============================================================================
 -- Seed: calificaciones (grupales por defecto, con un ajuste individual)
 -- Solo se califican las entregas con estatus 'Calificada'.

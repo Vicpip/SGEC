@@ -1,3 +1,5 @@
+SET NAMES utf8mb4;
+
 -- ============================================================================
 -- Seed: actividades (los 4 tipos, incluyendo programada, todos_los_equipos
 -- y entrega_por_equipo)

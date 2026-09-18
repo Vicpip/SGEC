@@ -1,3 +1,5 @@
+SET NAMES utf8mb4;
+
 -- ============================================================================
 -- Seed: entregas (mezcla de Calificada / En revision / Pendiente).
 -- La ausencia de fila también representa "Pendiente" (aún no entregado);

@@ -1,3 +1,5 @@
+SET NAMES utf8mb4;
+
 -- ============================================================================
 -- Seed: 12 alumnos adicionales + inscripción a materias
 -- Contraseña en claro (solo desarrollo): Alumno1234!
