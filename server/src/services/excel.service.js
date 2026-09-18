@@ -18,6 +18,31 @@ function normalizarEncabezado(encabezado) {
     .replace(/\s+/g, '_')
 }
 
+// Reglas de negocio compartidas por la importación masiva (parsearAlumnosDesdeExcel,
+// fila por fila) y el alta manual de un alumno (alumnos.controller.js, crear): boleta
+// de 10 dígitos, campos requeridos, correo del dominio institucional del Alumno.
+function validarAlumno({ boleta, nombre, apellido_paterno, grupo, correo_institucional }) {
+  const errores = []
+
+  if (!boleta) {
+    errores.push('El campo "boleta" es requerido')
+  } else if (!/^\d{10}$/.test(boleta)) {
+    errores.push('El campo "boleta" debe contener 10 dígitos numéricos')
+  }
+
+  if (!nombre) errores.push('El campo "nombre" es requerido')
+  if (!apellido_paterno) errores.push('El campo "apellido_paterno" es requerido')
+  if (!grupo) errores.push('El campo "grupo" es requerido')
+
+  if (!correo_institucional) {
+    errores.push('El campo "correo_institucional" es requerido')
+  } else if (!dominioValido(correo_institucional, 'Alumno')) {
+    errores.push('El campo "correo_institucional" debe pertenecer al dominio @alumno.ipn.mx')
+  }
+
+  return errores
+}
+
 function parsearAlumnosDesdeExcel(buffer) {
   const libro = XLSX.read(buffer, { type: 'buffer' })
   const hoja = libro.Sheets[libro.SheetNames[0]]
@@ -42,38 +67,22 @@ function parsearAlumnosDesdeExcel(buffer) {
     const grupo = String(fila.grupo ?? '').trim()
     const carrera = String(fila.carrera ?? '').trim()
 
-    const errores = []
-
-    if (!boleta) {
-      errores.push('El campo "boleta" es requerido')
-    } else if (!/^\d{10}$/.test(boleta)) {
-      errores.push('El campo "boleta" debe contener 10 dígitos numéricos')
-    }
-
-    if (!nombre) errores.push('El campo "nombre" es requerido')
-    if (!apellidoPaterno) errores.push('El campo "apellido_paterno" es requerido')
-    if (!grupo) errores.push('El campo "grupo" es requerido')
-
-    if (!correo) {
-      errores.push('El campo "correo_institucional" es requerido')
-    } else if (!dominioValido(correo, 'Alumno')) {
-      errores.push('El campo "correo_institucional" debe pertenecer al dominio @alumno.ipn.mx')
+    const datos = {
+      boleta,
+      nombre,
+      apellido_paterno: apellidoPaterno,
+      apellido_materno: apellidoMaterno || null,
+      correo_institucional: correo,
+      grupo,
+      carrera: carrera || null,
     }
 
     return {
       numero_fila: indice + 2, // fila 1 = encabezados
-      datos: {
-        boleta,
-        nombre,
-        apellido_paterno: apellidoPaterno,
-        apellido_materno: apellidoMaterno || null,
-        correo_institucional: correo,
-        grupo,
-        carrera: carrera || null,
-      },
-      errores,
+      datos,
+      errores: validarAlumno(datos),
     }
   })
 }
 
-module.exports = { parsearAlumnosDesdeExcel }
+module.exports = { parsearAlumnosDesdeExcel, validarAlumno }

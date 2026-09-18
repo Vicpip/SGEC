@@ -15,6 +15,7 @@ const entregasRoutes = require('./routes/entregas.routes')
 const calificacionesRoutes = require('./routes/calificaciones.routes')
 const avisosRoutes = require('./routes/avisos.routes')
 const reportesRoutes = require('./routes/reportes.routes')
+const dashboardRoutes = require('./routes/dashboard.routes')
 
 const env = validateEnv()
 const app = express()
@@ -50,6 +51,7 @@ app.use('/api/entregas', entregasRoutes)
 app.use('/api/calificaciones', calificacionesRoutes)
 app.use('/api/avisos', avisosRoutes)
 app.use('/api/reportes', reportesRoutes)
+app.use('/api/dashboard', dashboardRoutes)
 
 app.use((req, res) => {
   res.status(404).json({ error: 'Recurso no encontrado' })

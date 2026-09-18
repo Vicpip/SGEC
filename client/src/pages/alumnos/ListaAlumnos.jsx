@@ -5,13 +5,171 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Search, Upload, Users, Loader2 } from 'lucide-react'
+import * as XLSX from 'xlsx'
+import { Search, Upload, Users, Loader2, FileDown, UserPlus, X } from 'lucide-react'
 import PageWrapper from '../../components/layout/PageWrapper'
 import Badge from '../../components/ui/Badge'
 import ActionButtons from '../../components/ui/ActionButtons'
 import EmptyState from '../../components/ui/EmptyState'
 import * as alumnosService from '../../services/alumnos.service'
 import * as materiasService from '../../services/materias.service'
+
+const PLANTILLA_ENCABEZADOS = ['boleta', 'nombre', 'apellido_paterno', 'apellido_materno', 'grupo', 'correo_institucional']
+const PLANTILLA_EJEMPLO = ['2020630001', 'Juan', 'Pérez', 'López', '4CM1', 'jperez@alumno.ipn.mx']
+
+const FORM_INICIAL = { boleta: '', nombre: '', apellido_paterno: '', apellido_materno: '', grupo: '', correo: '' }
+
+function descargarPlantilla() {
+  const hoja = XLSX.utils.aoa_to_sheet([PLANTILLA_ENCABEZADOS, PLANTILLA_EJEMPLO])
+  const libro = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(libro, hoja, 'Alumnos')
+  XLSX.writeFile(libro, 'plantilla_alumnos.xlsx')
+}
+
+function NuevoAlumnoModal({ claveMateria, onClose, onCreado }) {
+  const [form, setForm] = useState(FORM_INICIAL)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  function actualizarCampo(campo, valor) {
+    setForm((prev) => ({ ...prev, [campo]: valor }))
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    setError('')
+
+    if (!form.boleta.trim() || !form.nombre.trim() || !form.apellido_paterno.trim() || !form.grupo.trim() || !form.correo.trim()) {
+      setError('Completa los campos requeridos')
+      return
+    }
+
+    setLoading(true)
+    try {
+      await alumnosService.crearAlumno(claveMateria, {
+        boleta: form.boleta.trim(),
+        nombre: form.nombre.trim(),
+        apellido_paterno: form.apellido_paterno.trim(),
+        apellido_materno: form.apellido_materno.trim() || undefined,
+        grupo: form.grupo.trim(),
+        correo: form.correo.trim(),
+      })
+      onCreado()
+    } catch (err) {
+      const detalle = err.response?.data?.errores?.[0]
+      setError(detalle || err.response?.data?.error || 'No se pudo dar de alta al alumno')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="card-header">
+          <span className="card-title">Nuevo alumno</span>
+          <button type="button" className="modal-close" onClick={onClose} aria-label="Cerrar">
+            <X className="icon-sm" />
+          </button>
+        </div>
+        <form onSubmit={handleSubmit}>
+          <div className="card-body">
+            {error && (
+              <div className="login-error" style={{ marginBottom: 12 }}>
+                {error}
+              </div>
+            )}
+            <div className="form-row">
+              <div className="form-group">
+                <label className="form-label" htmlFor="alumno-boleta">
+                  Boleta
+                </label>
+                <input
+                  id="alumno-boleta"
+                  className="form-control"
+                  placeholder="10 dígitos"
+                  value={form.boleta}
+                  onChange={(e) => actualizarCampo('boleta', e.target.value)}
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label" htmlFor="alumno-grupo">
+                  Grupo
+                </label>
+                <input
+                  id="alumno-grupo"
+                  className="form-control"
+                  placeholder="4CM1"
+                  value={form.grupo}
+                  onChange={(e) => actualizarCampo('grupo', e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="form-row">
+              <div className="form-group">
+                <label className="form-label" htmlFor="alumno-nombre">
+                  Nombre(s)
+                </label>
+                <input
+                  id="alumno-nombre"
+                  className="form-control"
+                  value={form.nombre}
+                  onChange={(e) => actualizarCampo('nombre', e.target.value)}
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label" htmlFor="alumno-apellido-paterno">
+                  Apellido paterno
+                </label>
+                <input
+                  id="alumno-apellido-paterno"
+                  className="form-control"
+                  value={form.apellido_paterno}
+                  onChange={(e) => actualizarCampo('apellido_paterno', e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="form-row">
+              <div className="form-group">
+                <label className="form-label" htmlFor="alumno-apellido-materno">
+                  Apellido materno
+                </label>
+                <input
+                  id="alumno-apellido-materno"
+                  className="form-control"
+                  value={form.apellido_materno}
+                  onChange={(e) => actualizarCampo('apellido_materno', e.target.value)}
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label" htmlFor="alumno-correo">
+                  Correo institucional
+                </label>
+                <input
+                  id="alumno-correo"
+                  className="form-control"
+                  placeholder="alumno@alumno.ipn.mx"
+                  value={form.correo}
+                  onChange={(e) => actualizarCampo('correo', e.target.value)}
+                />
+              </div>
+            </div>
+          </div>
+          <div className="card-header" style={{ borderTop: '1px solid var(--gray-100)', borderBottom: 'none' }}>
+            <div className="form-actions" style={{ width: '100%' }}>
+              <button type="button" className="btn btn-secondary" onClick={onClose} disabled={loading}>
+                Cancelar
+              </button>
+              <button type="submit" className="btn btn-primary" disabled={loading}>
+                {loading ? <Loader2 className="icon-sm spin" /> : 'Dar de alta'}
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
 
 export default function ListaAlumnos() {
   const navigate = useNavigate()
@@ -24,6 +182,7 @@ export default function ListaAlumnos() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [busqueda, setBusqueda] = useState('')
+  const [modalAbierto, setModalAbierto] = useState(false)
 
   useEffect(() => {
     materiasService
@@ -38,11 +197,10 @@ export default function ListaAlumnos() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  useEffect(() => {
+  function cargarAlumnos() {
     if (!claveMateria) return
-
     setLoading(true)
-    alumnosService
+    return alumnosService
       .listarAlumnos(claveMateria)
       .then((data) => {
         setAlumnos(data.alumnos)
@@ -55,6 +213,11 @@ export default function ListaAlumnos() {
         setMateria(null)
       })
       .finally(() => setLoading(false))
+  }
+
+  useEffect(() => {
+    cargarAlumnos()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [claveMateria])
 
   const alumnosFiltrados = useMemo(() => {
@@ -70,6 +233,11 @@ export default function ListaAlumnos() {
     setSearchParams({ materia: e.target.value })
   }
 
+  function handleAlumnoCreado() {
+    setModalAbierto(false)
+    cargarAlumnos()
+  }
+
   return (
     <PageWrapper
       title={
@@ -83,14 +251,24 @@ export default function ListaAlumnos() {
         )
       }
       actions={
-        <button
-          className="btn btn-secondary btn-sm"
-          onClick={() => navigate(`/alumnos/importar?materia=${claveMateria}`)}
-          disabled={!claveMateria}
-        >
-          <Upload className="icon-sm" />
-          Importar
-        </button>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button className="btn btn-secondary btn-sm" onClick={descargarPlantilla}>
+            <FileDown className="icon-sm" />
+            Descargar plantilla
+          </button>
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={() => navigate(`/alumnos/importar?materia=${claveMateria}`)}
+            disabled={!claveMateria}
+          >
+            <Upload className="icon-sm" />
+            Importar
+          </button>
+          <button className="btn btn-primary btn-sm" onClick={() => setModalAbierto(true)} disabled={!claveMateria}>
+            <UserPlus className="icon-sm" />
+            Alumno
+          </button>
+        </div>
       }
     >
       <div className="toolbar">
@@ -137,7 +315,7 @@ export default function ListaAlumnos() {
             <EmptyState
               icon={Users}
               title="Sin alumnos inscritos"
-              description="Importa una lista desde Excel para dar de alta a los alumnos de este grupo."
+              description="Importa una lista desde Excel o da de alta un alumno para este grupo."
             />
           ) : (
             <table>
@@ -173,6 +351,14 @@ export default function ListaAlumnos() {
           )}
         </div>
       </div>
+
+      {modalAbierto && (
+        <NuevoAlumnoModal
+          claveMateria={claveMateria}
+          onClose={() => setModalAbierto(false)}
+          onCreado={handleAlumnoCreado}
+        />
+      )}
     </PageWrapper>
   )
 }

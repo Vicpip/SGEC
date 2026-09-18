@@ -12,6 +12,10 @@ export function obtenerActividadesAlumno(id) {
   return api.get(`/alumnos/${id}/actividades`).then(({ data }) => data)
 }
 
+export function crearAlumno(materiaClave, datos) {
+  return api.post('/alumnos', { ...datos, materia: materiaClave }).then(({ data }) => data.alumno)
+}
+
 export function importarAlumnos(materiaClave, archivo) {
   const formData = new FormData()
   formData.append('materia', materiaClave)

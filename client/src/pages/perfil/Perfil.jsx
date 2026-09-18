@@ -3,14 +3,29 @@
 // URL: /perfil
 // Descripción: Datos personales de solo lectura, edición de foto y cambio de contraseña.
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Camera, Pencil, Lock, Eye, EyeOff, Loader2 } from 'lucide-react'
 import PageWrapper from '../../components/layout/PageWrapper'
 import Badge from '../../components/ui/Badge'
 import Avatar from '../../components/ui/Avatar'
+import { useAuth } from '../../hooks/useAuth'
 import * as authService from '../../services/auth.service'
+import * as usuariosService from '../../services/usuarios.service'
 
 const REGLA_CONTRASENA = /^(?=.*[A-Z])(?=.*[0-9]).{8,}$/
+
+const ROL_LABEL = { Administrador: 'Administrador', Profesor: 'Profesor', Alumno: 'Alumno' }
+
+function iniciales(persona) {
+  const a = persona?.nombre?.[0] ?? ''
+  const b = persona?.apellido_paterno?.[0] ?? ''
+  return `${a}${b}`.toUpperCase()
+}
+
+function nombreCompleto(persona) {
+  if (!persona) return ''
+  return `${persona.nombre} ${persona.apellido_paterno} ${persona.apellido_materno ?? ''}`.trim()
+}
 
 function PasswordField({ id, label, value, onChange, focused }) {
   const [visible, setVisible] = useState(false)
@@ -127,18 +142,43 @@ function CambiarContrasena() {
 }
 
 export default function Perfil() {
+  const { user } = useAuth()
+  const [perfil, setPerfil] = useState(user)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (!user?.id_usuario) return
+    setLoading(true)
+    usuariosService
+      .obtenerUsuario(user.id_usuario)
+      .then((data) => setPerfil({ ...user, ...data }))
+      .catch(() => setPerfil(user))
+      .finally(() => setLoading(false))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id_usuario])
+
+  if (loading && !perfil) {
+    return (
+      <PageWrapper title="Perfil y Configuración">
+        <div style={{ padding: 48, textAlign: 'center' }}>
+          <Loader2 className="icon-xl spin" style={{ color: 'var(--blue)' }} />
+        </div>
+      </PageWrapper>
+    )
+  }
+
   return (
     <PageWrapper title="Perfil y Configuración">
       <div style={{ maxWidth: 780 }}>
         <div className="card mb20" style={{ overflow: 'hidden' }}>
           <div className="profile-header">
-            <Avatar size="lg" initials="MG" />
+            <Avatar size="lg" initials={iniciales(perfil)} />
             <div>
-              <div style={{ fontSize: 18, fontWeight: 700, color: 'white' }}>Miguel Ángel García Ruiz</div>
-              <div style={{ fontSize: 12, color: 'rgba(255,255,255,.65)', marginTop: 4 }}>mgarcia@escom.ipn.mx</div>
+              <div style={{ fontSize: 18, fontWeight: 700, color: 'white' }}>{nombreCompleto(perfil)}</div>
+              <div style={{ fontSize: 12, color: 'rgba(255,255,255,.65)', marginTop: 4 }}>{perfil?.correo_institucional}</div>
               <div style={{ marginTop: 8 }}>
                 <span className="badge" style={{ background: 'rgba(255,255,255,.2)', color: 'white' }}>
-                  Profesor
+                  {ROL_LABEL[perfil?.rol] ?? perfil?.rol}
                 </span>
               </div>
             </div>
@@ -163,39 +203,53 @@ export default function Perfil() {
             <div className="form-row">
               <div className="form-group">
                 <label className="form-label">Nombre(s)</label>
-                <div className="form-control">Miguel Ángel</div>
+                <div className="form-control">{perfil?.nombre}</div>
               </div>
               <div className="form-group">
                 <label className="form-label">Apellidos</label>
-                <div className="form-control">García Ruiz</div>
+                <div className="form-control">{`${perfil?.apellido_paterno ?? ''} ${perfil?.apellido_materno ?? ''}`.trim()}</div>
               </div>
             </div>
             <div className="form-row">
               <div className="form-group">
                 <label className="form-label">Correo institucional</label>
                 <div className="form-control" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  mgarcia@escom.ipn.mx
+                  {perfil?.correo_institucional}
                   <Badge variant="gray">No editable</Badge>
                 </div>
               </div>
               <div className="form-group">
-                <label className="form-label">N.° de empleado</label>
-                <div className="form-control">IPN-2018-04291</div>
-              </div>
-            </div>
-            <div className="form-row">
-              <div className="form-group">
-                <label className="form-label">Departamento</label>
-                <div className="form-control">Ciencias de la Computación</div>
-              </div>
-              <div className="form-group">
                 <label className="form-label">Rol</label>
                 <div className="form-control" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span style={{ color: 'var(--blue)', fontWeight: 600 }}>Profesor</span>
+                  <span style={{ color: 'var(--blue)', fontWeight: 600 }}>{ROL_LABEL[perfil?.rol] ?? perfil?.rol}</span>
                   <Badge variant="blue">No editable</Badge>
                 </div>
               </div>
             </div>
+            {perfil?.rol === 'Profesor' && (
+              <div className="form-row">
+                <div className="form-group">
+                  <label className="form-label">N.° de empleado</label>
+                  <div className="form-control">{perfil?.no_empleado ?? '—'}</div>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Departamento</label>
+                  <div className="form-control">{perfil?.departamento ?? '—'}</div>
+                </div>
+              </div>
+            )}
+            {perfil?.rol === 'Alumno' && (
+              <div className="form-row">
+                <div className="form-group">
+                  <label className="form-label">Boleta</label>
+                  <div className="form-control">{perfil?.boleta ?? '—'}</div>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Grupo</label>
+                  <div className="form-control">{perfil?.grupo ?? '—'}</div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

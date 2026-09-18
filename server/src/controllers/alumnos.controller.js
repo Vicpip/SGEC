@@ -7,7 +7,7 @@
 const crypto = require('crypto')
 const bcrypt = require('bcryptjs')
 const pool = require('../config/db')
-const { parsearAlumnosDesdeExcel } = require('../services/excel.service')
+const { parsearAlumnosDesdeExcel, validarAlumno } = require('../services/excel.service')
 const { enviarCorreoRecuperacion } = require('../services/email.service')
 
 const RONDAS_BCRYPT = 10
@@ -56,6 +56,86 @@ async function crearAlumnoNuevo(conexion, datos) {
   await enviarCorreoRecuperacion(correo_institucional, tokenPlano)
 
   return resultAlumno.insertId
+}
+
+// POST /api/alumnos — alta manual de un alumno (alternativa a la importación masiva de
+// Sesión 5). Reutiliza validarAlumno (excel.service.js) y crearAlumnoNuevo para aplicar
+// exactamente las mismas reglas de negocio: boleta de 10 dígitos, dominio @alumno.ipn.mx,
+// y alta idempotente cuando la boleta o el correo ya existen (solo se inscribe en la
+// materia si aún no lo estaba, nunca se duplica el alumno).
+async function crear(req, res) {
+  const { boleta, nombre, apellido_paterno, apellido_materno, correo, grupo, materia: claveMateria } = req.body
+
+  const datos = {
+    boleta: String(boleta ?? '').trim(),
+    nombre: String(nombre ?? '').trim(),
+    apellido_paterno: String(apellido_paterno ?? '').trim(),
+    apellido_materno: apellido_materno ? String(apellido_materno).trim() : null,
+    correo_institucional: String(correo ?? '').trim().toLowerCase(),
+    grupo: String(grupo ?? '').trim(),
+    carrera: null,
+  }
+
+  const errores = validarAlumno(datos)
+  if (errores.length > 0) {
+    return res.status(400).json({ errores })
+  }
+
+  const idProfesor = await obtenerIdProfesorPropio(req.user.id_usuario)
+  const [materiaRows] = await pool.query(
+    'SELECT id_materia FROM materia WHERE clave = ? AND id_profesor = ? ORDER BY fecha_creacion DESC LIMIT 1',
+    [claveMateria, idProfesor]
+  )
+  const materiaRow = materiaRows[0]
+
+  if (!materiaRow) {
+    return res.status(404).json({ error: 'Materia no encontrada' })
+  }
+
+  const conexion = await pool.getConnection()
+  try {
+    await conexion.beginTransaction()
+
+    const [existente] = await conexion.query(
+      `SELECT a.id_alumno FROM alumno a
+       JOIN usuario u ON u.id_usuario = a.id_usuario
+       WHERE a.boleta = ? OR u.correo_institucional = ?`,
+      [datos.boleta, datos.correo_institucional]
+    )
+
+    const idAlumno = existente.length > 0 ? existente[0].id_alumno : await crearAlumnoNuevo(conexion, datos)
+
+    const [yaInscrito] = await conexion.query(
+      'SELECT id_materia_alumno FROM materia_alumno WHERE id_materia = ? AND id_alumno = ?',
+      [materiaRow.id_materia, idAlumno]
+    )
+
+    if (yaInscrito.length === 0) {
+      await conexion.query('INSERT INTO materia_alumno (id_materia, id_alumno) VALUES (?, ?)', [
+        materiaRow.id_materia,
+        idAlumno,
+      ])
+    }
+
+    await conexion.commit()
+
+    const [alumnoRows] = await pool.query(
+      `SELECT a.id_alumno, a.boleta, a.grupo, a.carrera,
+              u.nombre, u.apellido_paterno, u.apellido_materno, u.correo_institucional, u.activo
+       FROM alumno a JOIN usuario u ON u.id_usuario = a.id_usuario WHERE a.id_alumno = ?`,
+      [idAlumno]
+    )
+
+    res.status(201).json({ alumno: alumnoRows[0] })
+  } catch (err) {
+    await conexion.rollback()
+    if (err.code === 'ER_DUP_ENTRY') {
+      return res.status(409).json({ error: 'La boleta o el correo ya están registrados con datos distintos' })
+    }
+    throw err
+  } finally {
+    conexion.release()
+  }
 }
 
 async function listar(req, res) {
@@ -282,4 +362,4 @@ async function importarExcel(req, res) {
   res.status(200).json({ resultado })
 }
 
-module.exports = { listar, obtener, importarExcel, actividadesDeAlumno }
+module.exports = { listar, obtener, crear, importarExcel, actividadesDeAlumno }

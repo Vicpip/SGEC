@@ -241,7 +241,7 @@ tr:last-child td { border-bottom: none; }
 .calificacion-input { width: 64px; padding: 5px 8px; border: 1px solid var(--gray-200); border-radius: 6px; font-size: 13px; text-align: center; background: white; font-family: inherit; }
 
 /* ── Drag-drop zone (importar alumnos) ── */
-.dropzone { border: 2px dashed var(--blue); border-radius: 12px; background: var(--blue-light); padding: 40px 24px; text-align: center; margin-bottom: 20px; }
+.dropzone { display: block; border: 2px dashed var(--blue); border-radius: 12px; background: var(--blue-light); padding: 40px 24px; text-align: center; margin-bottom: 20px; }
 .dropzone h3 { font-size: 15px; font-weight: 600; color: var(--navy); margin-bottom: 6px; margin-top: 12px; }
 .dropzone p { font-size: 13px; color: var(--gray-400); }
 
@@ -322,6 +322,12 @@ tr:last-child td { border-bottom: none; }
 .search-wrap svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--gray-400); }
 .search-input { width: 100%; padding: 8px 12px 8px 34px; border: 1px solid var(--gray-200); border-radius: var(--r-input); font-size: 13px; color: var(--gray-600); background: white; }
 .select-input { padding: 8px 12px; border: 1px solid var(--gray-200); border-radius: var(--r-input); font-size: 13px; color: var(--gray-600); background: white; }
+
+/* ── Modal (formulario modal genérico) ── */
+.modal-overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.55); display: flex; align-items: center; justify-content: center; z-index: 200; padding: 24px; }
+.modal { background: white; border-radius: var(--r-card); box-shadow: var(--shadow); width: 100%; max-width: 480px; max-height: 90vh; overflow-y: auto; }
+.modal-close { display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 8px; border: none; background: transparent; color: var(--gray-400); cursor: pointer; }
+.modal-close:hover { background: var(--gray-50); color: var(--gray-800); }
 
 /* ── Forms ── */
 .form-group { margin-bottom: 18px; }

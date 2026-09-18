@@ -3,8 +3,10 @@ const multer = require('multer')
 const alumnosController = require('../controllers/alumnos.controller')
 const authMiddleware = require('../middlewares/auth.middleware')
 const { requireRole } = require('../middlewares/role.middleware')
+const { validateBody } = require('../middlewares/validate.middleware')
 const asyncHandler = require('../utils/asyncHandler')
 const { validateEnv } = require('../config/env')
+const { crearAlumnoSchema } = require('../validators/alumnos.validators')
 
 const env = validateEnv()
 
@@ -49,6 +51,7 @@ router.use(requireRole('Profesor'))
 router.get('/', asyncHandler(alumnosController.listar))
 router.get('/:id', asyncHandler(alumnosController.obtener))
 router.get('/:id/actividades', asyncHandler(alumnosController.actividadesDeAlumno))
+router.post('/', validateBody(crearAlumnoSchema), asyncHandler(alumnosController.crear))
 router.post('/importar', subirExcel, asyncHandler(alumnosController.importarExcel))
 
 module.exports = router
