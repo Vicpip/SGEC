@@ -171,7 +171,7 @@ sgec/
 
 ### Requisitos previos
 
-- Node.js >= 18
+- Node.js >= 20
 - MySQL >= 8.0
 - npm >= 9
 

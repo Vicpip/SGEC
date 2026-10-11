@@ -15,10 +15,21 @@ function authMiddleware(req, res, next) {
   try {
     const payload = jwt.verify(token, env.jwt.secret)
     req.user = payload
-    next()
   } catch (err) {
     return res.status(401).json({ error: 'Token inválido o expirado' })
   }
+
+  // Contraseña temporal pendiente de cambio: el token solo sirve para /api/auth/*
+  // (me, logout, change-password). Evita que la contraseña que conoce el profesor
+  // permita operar la cuenta del alumno saltándose la pantalla de Perfil del frontend.
+  if (req.user.debe_cambiar_contrasena && req.baseUrl !== '/api/auth') {
+    return res.status(403).json({
+      error: 'Debes cambiar tu contraseña temporal antes de continuar',
+      codigo: 'CAMBIO_CONTRASENA_REQUERIDO',
+    })
+  }
+
+  next()
 }
 
 module.exports = authMiddleware

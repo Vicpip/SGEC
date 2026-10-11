@@ -6,11 +6,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import * as XLSX from 'xlsx'
-import { Search, Upload, Users, Loader2, FileDown, UserPlus, X } from 'lucide-react'
+import { Search, Upload, Users, Loader2, FileDown, UserPlus, X, KeyRound } from 'lucide-react'
 import PageWrapper from '../../components/layout/PageWrapper'
 import Badge from '../../components/ui/Badge'
 import ActionButtons from '../../components/ui/ActionButtons'
 import EmptyState from '../../components/ui/EmptyState'
+import CredencialesTemporales from '../../components/ui/CredencialesTemporales'
 import * as alumnosService from '../../services/alumnos.service'
 import * as materiasService from '../../services/materias.service'
 
@@ -46,7 +47,7 @@ function NuevoAlumnoModal({ claveMateria, onClose, onCreado }) {
 
     setLoading(true)
     try {
-      await alumnosService.crearAlumno(claveMateria, {
+      const data = await alumnosService.crearAlumno(claveMateria, {
         boleta: form.boleta.trim(),
         nombre: form.nombre.trim(),
         apellido_paterno: form.apellido_paterno.trim(),
@@ -54,7 +55,7 @@ function NuevoAlumnoModal({ claveMateria, onClose, onCreado }) {
         grupo: form.grupo.trim(),
         correo: form.correo.trim(),
       })
-      onCreado()
+      onCreado(data.credenciales ?? [])
     } catch (err) {
       const detalle = err.response?.data?.errores?.[0]
       setError(detalle || err.response?.data?.error || 'No se pudo dar de alta al alumno')
@@ -171,6 +172,85 @@ function NuevoAlumnoModal({ claveMateria, onClose, onCreado }) {
   )
 }
 
+// Muestra una sola vez las contraseñas temporales recién generadas (alta manual o
+// "Restablecer acceso"). Solo se cierra con el botón, no con un clic fuera del cuadro,
+// para no perderlas por accidente.
+function CredencialesModal({ titulo, credenciales, onClose }) {
+  return (
+    <div className="modal-overlay">
+      <div className="modal modal-wide">
+        <div className="card-header">
+          <span className="card-title">{titulo}</span>
+        </div>
+        <div className="card-body">
+          <CredencialesTemporales credenciales={credenciales} />
+        </div>
+        <div className="card-header" style={{ borderTop: '1px solid var(--gray-100)', borderBottom: 'none' }}>
+          <div className="form-actions" style={{ width: '100%' }}>
+            <button type="button" className="btn btn-secondary" onClick={onClose}>
+              Ya las guardé, cerrar
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Confirmación previa a regenerar la contraseña temporal de un alumno: la contraseña que
+// tenga en ese momento deja de servir.
+function RestablecerAccesoModal({ alumno, onClose, onRestablecido }) {
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  async function handleConfirmar() {
+    setLoading(true)
+    setError('')
+    try {
+      const credenciales = await alumnosService.restablecerAcceso(alumno.id_alumno)
+      onRestablecido(credenciales)
+    } catch (err) {
+      setError(err.response?.data?.error || 'No se pudo restablecer el acceso')
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="modal-overlay" onClick={loading ? undefined : onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="card-header">
+          <span className="card-title">Restablecer acceso</span>
+          <button type="button" className="modal-close" onClick={onClose} aria-label="Cerrar" disabled={loading}>
+            <X className="icon-sm" />
+          </button>
+        </div>
+        <div className="card-body" style={{ fontSize: 13, color: 'var(--gray-600)', lineHeight: 1.6 }}>
+          Se generará una contraseña temporal nueva para{' '}
+          <strong>
+            {alumno.nombre} {alumno.apellido_paterno}
+          </strong>{' '}
+          ({alumno.boleta}). Su contraseña actual dejará de funcionar y deberá cambiar la temporal al iniciar sesión.
+          {error && (
+            <div className="login-error" style={{ marginTop: 12 }}>
+              {error}
+            </div>
+          )}
+        </div>
+        <div className="card-header" style={{ borderTop: '1px solid var(--gray-100)', borderBottom: 'none' }}>
+          <div className="form-actions" style={{ width: '100%' }}>
+            <button type="button" className="btn btn-secondary" onClick={onClose} disabled={loading}>
+              Cancelar
+            </button>
+            <button type="button" className="btn btn-primary" onClick={handleConfirmar} disabled={loading}>
+              {loading ? <Loader2 className="icon-sm spin" /> : 'Generar contraseña temporal'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function ListaAlumnos() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -183,6 +263,9 @@ export default function ListaAlumnos() {
   const [error, setError] = useState('')
   const [busqueda, setBusqueda] = useState('')
   const [modalAbierto, setModalAbierto] = useState(false)
+  const [alumnoARestablecer, setAlumnoARestablecer] = useState(null)
+  // { titulo, lista } mientras se muestran contraseñas temporales recién generadas.
+  const [credenciales, setCredenciales] = useState(null)
 
   useEffect(() => {
     materiasService
@@ -233,9 +316,17 @@ export default function ListaAlumnos() {
     setSearchParams({ materia: e.target.value })
   }
 
-  function handleAlumnoCreado() {
+  function handleAlumnoCreado(nuevas) {
     setModalAbierto(false)
+    if (nuevas.length > 0) {
+      setCredenciales({ titulo: 'Alumno dado de alta', lista: nuevas })
+    }
     cargarAlumnos()
+  }
+
+  function handleAccesoRestablecido(nuevas) {
+    setAlumnoARestablecer(null)
+    setCredenciales({ titulo: 'Acceso restablecido', lista: nuevas })
   }
 
   return (
@@ -342,7 +433,18 @@ export default function ListaAlumnos() {
                     <td>{al.grupo}</td>
                     <td className="text-sm">{al.carrera ?? '—'}</td>
                     <td>
-                      <ActionButtons onView={() => navigate(`/alumnos/${al.id_alumno}/actividades`)} />
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <ActionButtons onView={() => navigate(`/alumnos/${al.id_alumno}/actividades`)} />
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => setAlumnoARestablecer(al)}
+                          title="Generar una contraseña temporal nueva para este alumno"
+                        >
+                          <KeyRound className="icon-sm" />
+                          Restablecer acceso
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -357,6 +459,22 @@ export default function ListaAlumnos() {
           claveMateria={claveMateria}
           onClose={() => setModalAbierto(false)}
           onCreado={handleAlumnoCreado}
+        />
+      )}
+
+      {alumnoARestablecer && (
+        <RestablecerAccesoModal
+          alumno={alumnoARestablecer}
+          onClose={() => setAlumnoARestablecer(null)}
+          onRestablecido={handleAccesoRestablecido}
+        />
+      )}
+
+      {credenciales && (
+        <CredencialesModal
+          titulo={credenciales.titulo}
+          credenciales={credenciales.lista}
+          onClose={() => setCredenciales(null)}
         />
       )}
     </PageWrapper>

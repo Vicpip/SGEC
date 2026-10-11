@@ -7,10 +7,11 @@
 
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, FileText, Inbox, Loader2, ClipboardList, Users, User, Clock } from 'lucide-react'
+import { ArrowLeft, Inbox, Loader2, ClipboardList, Users, User, Clock } from 'lucide-react'
 import PageWrapper from '../../components/layout/PageWrapper'
 import Badge from '../../components/ui/Badge'
 import EmptyState from '../../components/ui/EmptyState'
+import ArchivoLink from '../../components/ui/ArchivoLink'
 import * as actividadesService from '../../services/actividades.service'
 import * as entregasService from '../../services/entregas.service'
 
@@ -168,10 +169,12 @@ export default function DetalleActividad() {
           ) : (
             <div>
               {actividad.archivos.map((doc) => (
-                <div key={doc.id_archivo_actividad} className="file-chip">
-                  <FileText className="icon-sm" />
-                  <span>{doc.nombre_archivo}</span>
-                </div>
+                <ArchivoLink
+                  key={doc.id_archivo_actividad}
+                  tipo="actividad"
+                  id={doc.id_archivo_actividad}
+                  nombre={doc.nombre_archivo}
+                />
               ))}
             </div>
           )}

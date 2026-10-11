@@ -4,7 +4,7 @@
 // Descripción: Datos personales de solo lectura, edición de foto y cambio de contraseña.
 
 import { useEffect, useState } from 'react'
-import { Camera, Pencil, Lock, Eye, EyeOff, Loader2 } from 'lucide-react'
+import { Camera, Pencil, Lock, Eye, EyeOff, Loader2, AlertTriangle } from 'lucide-react'
 import PageWrapper from '../../components/layout/PageWrapper'
 import Badge from '../../components/ui/Badge'
 import Avatar from '../../components/ui/Avatar'
@@ -58,6 +58,7 @@ function PasswordField({ id, label, value, onChange, focused }) {
 }
 
 function CambiarContrasena() {
+  const { debeCambiarContrasena, contrasenaCambiada } = useAuth()
   const [actual, setActual] = useState('')
   const [nueva, setNueva] = useState('')
   const [confirmar, setConfirmar] = useState('')
@@ -93,7 +94,10 @@ function CambiarContrasena() {
 
     setLoading(true)
     try {
-      await authService.cambiarContrasena(actual, nueva)
+      const data = await authService.cambiarContrasena(actual, nueva)
+      // El servidor devuelve un token nuevo: el anterior lleva la marca de cambio
+      // obligatorio y la API lo seguiría rechazando.
+      contrasenaCambiada(data.token)
       setActual('')
       setNueva('')
       setConfirmar('')
@@ -112,7 +116,12 @@ function CambiarContrasena() {
       </div>
       <div className="card-body">
         <div className="form-row">
-          <PasswordField id="pw-actual" label="Contraseña actual" value={actual} onChange={setActual} />
+          <PasswordField
+            id="pw-actual"
+            label={debeCambiarContrasena ? 'Contraseña temporal' : 'Contraseña actual'}
+            value={actual}
+            onChange={setActual}
+          />
           <div />
         </div>
         <div className="form-row">
@@ -142,12 +151,19 @@ function CambiarContrasena() {
 }
 
 export default function Perfil() {
-  const { user } = useAuth()
+  const { user, debeCambiarContrasena } = useAuth()
   const [perfil, setPerfil] = useState(user)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     if (!user?.id_usuario) return
+    // Con la contraseña temporal la API solo atiende /api/auth/*: se muestra lo que ya
+    // trae la sesión y los datos completos se cargan al terminar el cambio.
+    if (debeCambiarContrasena) {
+      setPerfil(user)
+      setLoading(false)
+      return
+    }
     setLoading(true)
     usuariosService
       .obtenerUsuario(user.id_usuario)
@@ -155,7 +171,7 @@ export default function Perfil() {
       .catch(() => setPerfil(user))
       .finally(() => setLoading(false))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id_usuario])
+  }, [user?.id_usuario, debeCambiarContrasena])
 
   if (loading && !perfil) {
     return (
@@ -170,6 +186,16 @@ export default function Perfil() {
   return (
     <PageWrapper title="Perfil y Configuración">
       <div style={{ maxWidth: 780 }}>
+        {debeCambiarContrasena && (
+          <div className="credenciales-aviso" style={{ marginBottom: 20 }}>
+            <AlertTriangle className="icon-sm" />
+            <div>
+              <strong>Debes cambiar tu contraseña temporal para continuar.</strong> Escribe en "Contraseña temporal" la
+              que te entregó tu profesor y elige una nueva en el formulario de abajo. Hasta entonces no podrás usar el
+              resto del sistema.
+            </div>
+          </div>
+        )}
         <div className="card mb20" style={{ overflow: 'hidden' }}>
           <div className="profile-header">
             <Avatar size="lg" initials={iniciales(perfil)} />

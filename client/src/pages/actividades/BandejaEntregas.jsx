@@ -12,6 +12,7 @@ import { ArrowLeft, Search, Archive, Inbox, MessageSquare, User, Users, ChevronR
 import PageWrapper from '../../components/layout/PageWrapper'
 import Badge from '../../components/ui/Badge'
 import Avatar from '../../components/ui/Avatar'
+import ArchivoLink from '../../components/ui/ArchivoLink'
 import * as entregasService from '../../services/entregas.service'
 import * as calificacionesService from '../../services/calificaciones.service'
 
@@ -386,10 +387,13 @@ export default function BandejaEntregas() {
                           {it.entrega?.archivos.length > 0 ? (
                             <div className="tag-row" style={{ marginTop: 0 }}>
                               {it.entrega.archivos.map((archivo) => (
-                                <div key={archivo.id_archivo_entrega} className="file-chip">
-                                  <Archive className="icon-sm" />
-                                  <span>{archivo.nombre_archivo}</span>
-                                </div>
+                                <ArchivoLink
+                                  key={archivo.id_archivo_entrega}
+                                  tipo="entrega"
+                                  id={archivo.id_archivo_entrega}
+                                  nombre={archivo.nombre_archivo}
+                                  icon={Archive}
+                                />
                               ))}
                             </div>
                           ) : (

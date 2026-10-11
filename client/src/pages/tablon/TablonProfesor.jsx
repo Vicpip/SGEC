@@ -7,6 +7,7 @@
 import { useEffect, useState } from 'react'
 import { Plus, Paperclip, FileText, X, Megaphone, Loader2 } from 'lucide-react'
 import PageWrapper from '../../components/layout/PageWrapper'
+import ArchivoLink from '../../components/ui/ArchivoLink'
 import { useAuth } from '../../hooks/useAuth'
 import * as materiasService from '../../services/materias.service'
 import * as avisosService from '../../services/avisos.service'
@@ -207,10 +208,12 @@ export default function TablonProfesor() {
                 {av.archivos.length > 0 && (
                   <div className="tag-row" style={{ marginBottom: 10 }}>
                     {av.archivos.map((archivo) => (
-                      <span key={archivo.id_archivo_aviso} className="file-chip">
-                        <FileText className="icon-sm" />
-                        {archivo.nombre_archivo}
-                      </span>
+                      <ArchivoLink
+                        key={archivo.id_archivo_aviso}
+                        tipo="aviso"
+                        id={archivo.id_archivo_aviso}
+                        nombre={archivo.nombre_archivo}
+                      />
                     ))}
                   </div>
                 )}

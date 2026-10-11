@@ -10,6 +10,7 @@ import { Download, Loader2, Megaphone } from 'lucide-react'
 import PageWrapper from '../../components/layout/PageWrapper'
 import Badge from '../../components/ui/Badge'
 import EmptyState from '../../components/ui/EmptyState'
+import ArchivoLink from '../../components/ui/ArchivoLink'
 import * as avisosService from '../../services/avisos.service'
 
 function formatFecha(fecha) {
@@ -151,10 +152,13 @@ export default function TablonAlumno() {
               {av.archivos.length > 0 && (
                 <div className="tag-row" style={{ marginTop: 10 }}>
                   {av.archivos.map((archivo) => (
-                    <span key={archivo.id_archivo_aviso} className="file-chip">
-                      <Download className="icon-sm" />
-                      {archivo.nombre_archivo}
-                    </span>
+                    <ArchivoLink
+                      key={archivo.id_archivo_aviso}
+                      tipo="aviso"
+                      id={archivo.id_archivo_aviso}
+                      nombre={archivo.nombre_archivo}
+                      icon={Download}
+                    />
                   ))}
                 </div>
               )}

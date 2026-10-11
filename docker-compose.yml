@@ -47,6 +47,14 @@ services:
       MAX_FILE_SIZE_MB: ${MAX_FILE_SIZE_MB:-20}
       ALLOWED_EMAIL_DOMAINS: ${ALLOWED_EMAIL_DOMAINS}
       CLIENT_URL: ${CLIENT_URL}
+      # Correo saliente (opcional): sin SMTP_HOST el servidor no envía nada.
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      EMAIL_FROM: ${EMAIL_FROM:-}
+      EMAIL_DRY_RUN: ${EMAIL_DRY_RUN:-false}
     ports:
       - "3001:3001"
     volumes:

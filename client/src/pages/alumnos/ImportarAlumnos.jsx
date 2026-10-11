@@ -8,6 +8,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, FileSpreadsheet, FileText, AlertTriangle, Check, Loader2 } from 'lucide-react'
 import PageWrapper from '../../components/layout/PageWrapper'
 import Badge from '../../components/ui/Badge'
+import CredencialesTemporales from '../../components/ui/CredencialesTemporales'
 import * as alumnosService from '../../services/alumnos.service'
 
 export default function ImportarAlumnos() {
@@ -143,6 +144,18 @@ export default function ImportarAlumnos() {
                     <Badge variant="blue">{resultado.total} filas procesadas</Badge>
                   </div>
                 </div>
+
+                {resultado.credenciales.length > 0 && (
+                  <div className="card" style={{ marginTop: 16 }}>
+                    <div className="card-header">
+                      <span className="card-title">Acceso de los alumnos nuevos</span>
+                      <Badge variant="blue">{resultado.credenciales.length} cuentas creadas</Badge>
+                    </div>
+                    <div className="card-body">
+                      <CredencialesTemporales credenciales={resultado.credenciales} />
+                    </div>
+                  </div>
+                )}
               </>
             )}
 

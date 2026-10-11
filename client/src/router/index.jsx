@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { rutaDashboardPorRol } from '../utils/roleRoutes'
@@ -42,8 +42,11 @@ function FullScreenSpinner() {
 // Valida que el usuario esté autenticado y, si se especifican, tenga uno de los roles
 // permitidos. Cada página arma su propio layout con PageWrapper (título, acciones del
 // topbar) en lugar de recibir uno genérico aquí.
+// Con contraseña temporal pendiente de cambio, toda ruta protegida redirige a /perfil
+// hasta que el usuario la cambie (el servidor aplica la misma regla a la API).
 function ProtectedRoute({ roles, children }) {
-  const { isAuthenticated, rol, loading } = useAuth()
+  const { isAuthenticated, rol, loading, debeCambiarContrasena } = useAuth()
+  const location = useLocation()
 
   if (loading) {
     return <FullScreenSpinner />
@@ -51,6 +54,10 @@ function ProtectedRoute({ roles, children }) {
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />
+  }
+
+  if (debeCambiarContrasena && location.pathname !== '/perfil') {
+    return <Navigate to="/perfil" replace />
   }
 
   if (roles && !roles.includes(rol)) {
@@ -61,7 +68,8 @@ function ProtectedRoute({ roles, children }) {
 }
 
 export default function AppRouter() {
-  const { isAuthenticated, rol, loading } = useAuth()
+  const { isAuthenticated, rol, loading, debeCambiarContrasena } = useAuth()
+  const inicio = debeCambiarContrasena ? '/perfil' : rutaDashboardPorRol(rol)
 
   return (
     <Routes>
@@ -167,7 +175,7 @@ export default function AppRouter() {
           loading ? (
             <FullScreenSpinner />
           ) : (
-            <Navigate to={isAuthenticated ? rutaDashboardPorRol(rol) : '/login'} replace />
+            <Navigate to={isAuthenticated ? inicio : '/login'} replace />
           )
         }
       />
@@ -177,7 +185,7 @@ export default function AppRouter() {
           loading ? (
             <FullScreenSpinner />
           ) : (
-            <Navigate to={isAuthenticated ? rutaDashboardPorRol(rol) : '/login'} replace />
+            <Navigate to={isAuthenticated ? inicio : '/login'} replace />
           )
         }
       />

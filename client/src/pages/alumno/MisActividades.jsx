@@ -13,6 +13,7 @@ import { LayoutList, Layers, ChevronRight, User, Users, Loader2, ClipboardList }
 import PageWrapper from '../../components/layout/PageWrapper'
 import Badge from '../../components/ui/Badge'
 import EmptyState from '../../components/ui/EmptyState'
+import ArchivoLink from '../../components/ui/ArchivoLink'
 import * as actividadesService from '../../services/actividades.service'
 
 const TIPO_VARIANT = { 'En clase': 'gray', Practica: 'blue', Tarea: 'navy', Proyecto: 'orange' }
@@ -43,7 +44,21 @@ function FilaActividad({ actividad, navigate }) {
   const dias = diasRestantes(actividad.fecha_limite)
   return (
     <tr className="clickable-row" onClick={() => navigate(`/alumno/actividades/${actividad.id_actividad}`)}>
-      <td className="td-bold">{actividad.titulo}</td>
+      <td className="td-bold">
+        {actividad.titulo}
+        {actividad.archivos?.length > 0 && (
+          <div className="tag-row" style={{ fontWeight: 400 }}>
+            {actividad.archivos.map((d) => (
+              <ArchivoLink
+                key={d.id_archivo_actividad}
+                tipo="actividad"
+                id={d.id_archivo_actividad}
+                nombre={d.nombre_archivo}
+              />
+            ))}
+          </div>
+        )}
+      </td>
       <td>
         <Badge variant={TIPO_VARIANT[actividad.tipo] ?? 'gray'}>{TIPO_LABEL[actividad.tipo] ?? actividad.tipo}</Badge>
       </td>

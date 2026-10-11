@@ -27,7 +27,7 @@ El contexto funcional completo (descripción, características, roles, reglas de
 | HTTP | axios |
 | Íconos | lucide-react (sin emojis en toda la UI) |
 | Gráficas | recharts |
-| Backend | Node.js 18+ · Express 4 |
+| Backend | Node.js 20+ · Express 4 |
 | Base de datos | MySQL 8 (mysql2) |
 | Autenticación | JWT (jsonwebtoken) + bcryptjs |
 | Import/Export | xlsx (SheetJS) para importar alumnos, pdfkit (o similar) para reportes en PDF |
@@ -276,12 +276,23 @@ solo íconos `lucide-react`. Tarjetas con sombra suave (`--shadow`) y `border-ra
 | S11 | Reportes | ✅ Completa | 3e55ede |
 | S12 | Auditoría de seguridad final y hardening | ✅ Completa | 109daaf |
 
-**Pendientes transversales:** ninguno bloqueante. Queda documentado como trabajo pendiente para
-una sesión futura (fuera del alcance "sin features nuevas" de S12, ver `docs/SECURITY.md`):
-- Reemplazar `email.service.js` (stub que solo hace `console.log`) por un proveedor SMTP real
-  antes de manejar contraseñas de usuarios reales en producción.
-- Agregar un endpoint de descarga para `archivo_actividad`/`archivo_entrega`/`archivo_aviso`
-  (hoy se referencian en la base de datos pero no hay ninguna ruta que sirva el archivo).
+**Plan de cierre (octubre 2026)** — sesiones 13 a 17, descritas en `PLAN-CIERRE.md` (raíz del
+repo). El resumen de cada una vive en `docs/cierre/S<N>.md`.
+
+| Sesión | Tema | Estado | Commit |
+|--------|------|--------|--------|
+| S13 | Adjuntos y acceso de alumnos | ✅ Completa | HASH_S13 |
+| S14 | ABC completo y tipo de evaluación | ⏳ Pendiente | — |
+| S15 | Equipos espejo, reporte y panel del alumno | ⏳ Pendiente | — |
+| S16 | Hardening de producción | ⏳ Pendiente | — |
+| S17 | Cierre documental | ⏳ Pendiente | — |
+
+**Pendientes transversales:** los dos que dejó S12 quedaron resueltos en S13 —
+`email.service.js` ya envía por SMTP con nodemailer (opcional: solo si hay variables `SMTP_*`;
+las credenciales reales se configuran en el `.env` del servidor) y los adjuntos se descargan por
+`GET /api/archivos/:tipo/:id`. Lo que sigue abierto es el resto del plan de cierre (S14–S17).
+La migración `002` (`usuario.debe_cambiar_contrasena`) debe aplicarse en toda base existente
+antes de desplegar el código de S13 (ver `docs/DEPLOYMENT.md`).
 
 Documentación técnica completa en `docs/`: `ARQUITECTURA.md`, `API.md`, `SECURITY.md`,
 `DEPLOYMENT.md`.

@@ -32,7 +32,9 @@ CREATE TABLE usuario (
   correo_alterno        VARCHAR(150) NULL,
   notificaciones_email  BOOLEAN NOT NULL DEFAULT TRUE,
   reset_token_hash      VARCHAR(255) NULL,
-  reset_token_expira    DATETIME NULL
+  reset_token_expira    DATETIME NULL,
+  -- TRUE = contraseña temporal generada por el sistema; debe cambiarse al primer login.
+  debe_cambiar_contrasena BOOLEAN NOT NULL DEFAULT FALSE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ── 2. profesor ──────────────────────────────────────────────────────────

@@ -57,6 +57,19 @@ function validateEnv() {
     // Origen del frontend, usado para restringir CORS y para armar enlaces de
     // recuperación de contraseña. Opcional: cae a la URL de desarrollo de Vite.
     clientUrl: process.env.CLIENT_URL || 'http://localhost:5173',
+    // Correo saliente (opcional). Sin SMTP_HOST el sistema no envía nada y ningún flujo
+    // se rompe: el acceso de los alumnos se resuelve con la contraseña temporal que ve
+    // el profesor. Las credenciales reales viven solo en el .env del servidor.
+    smtp: {
+      host: process.env.SMTP_HOST || '',
+      port: Number(process.env.SMTP_PORT) || 587,
+      secure: process.env.SMTP_SECURE === 'true',
+      user: process.env.SMTP_USER || '',
+      pass: process.env.SMTP_PASS || '',
+      from: process.env.EMAIL_FROM || process.env.SMTP_USER || '',
+    },
+    // EMAIL_DRY_RUN=true: no se envía nada; solo se registra destinatario y asunto.
+    emailDryRun: process.env.EMAIL_DRY_RUN === 'true',
   }
 }
 

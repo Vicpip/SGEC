@@ -20,6 +20,7 @@ import {
 import PageWrapper from '../../components/layout/PageWrapper'
 import Badge from '../../components/ui/Badge'
 import Avatar from '../../components/ui/Avatar'
+import ArchivoLink from '../../components/ui/ArchivoLink'
 import * as actividadesService from '../../services/actividades.service'
 import * as entregasService from '../../services/entregas.service'
 
@@ -194,10 +195,12 @@ export default function EntregarActividad() {
                   <div className="section-lbl mt16">Documentos del profesor</div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                     {actividad.archivos.map((d) => (
-                      <span key={d.id_archivo_actividad} className="file-chip">
-                        <FileText className="icon-sm" />
-                        {d.nombre_archivo}
-                      </span>
+                      <ArchivoLink
+                        key={d.id_archivo_actividad}
+                        tipo="actividad"
+                        id={d.id_archivo_actividad}
+                        nombre={d.nombre_archivo}
+                      />
                     ))}
                   </div>
                 </>
@@ -256,10 +259,7 @@ export default function EntregarActividad() {
                 {miEntrega.archivos.length > 0 ? (
                   miEntrega.archivos.map((a) => (
                     <div key={a.id_archivo_entrega} className="file-list-item">
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <FileText className="icon-sm" style={{ color: 'var(--blue)' }} />
-                        <span>{a.nombre_archivo}</span>
-                      </div>
+                      <ArchivoLink tipo="entrega" id={a.id_archivo_entrega} nombre={a.nombre_archivo} />
                     </div>
                   ))
                 ) : (

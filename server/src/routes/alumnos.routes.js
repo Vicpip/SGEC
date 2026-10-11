@@ -53,5 +53,6 @@ router.get('/:id', asyncHandler(alumnosController.obtener))
 router.get('/:id/actividades', asyncHandler(alumnosController.actividadesDeAlumno))
 router.post('/', validateBody(crearAlumnoSchema), asyncHandler(alumnosController.crear))
 router.post('/importar', subirExcel, asyncHandler(alumnosController.importarExcel))
+router.post('/:id/restablecer-acceso', asyncHandler(alumnosController.restablecerAcceso))
 
 module.exports = router

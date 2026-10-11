@@ -272,6 +272,12 @@ endpoint y controles de rol — no como un placeholder heredado.
 
 ## Hallazgos adicionales (fuera del checklist, encontrados durante la auditoría)
 
+> **Actualización — Sesión 13 (octubre 2026):** los dos hallazgos de esta sección quedaron
+> resueltos. `email.service.js` usa nodemailer y ya no registra enlaces, tokens ni contraseñas
+> (ver "Sesión 13" al final de este documento); la descarga de adjuntos existe en
+> `GET /api/archivos/:tipo/:id` con verificación de propiedad. El texto original se conserva
+> como registro de la auditoría de la Sesión 12.
+
 - **`email.service.js` registra el token de recuperación de contraseña en texto plano en el log
   del servidor** (`console.log`). Es un stub reconocido en su propio comentario (no hay proveedor
   SMTP integrado en el alcance del Servicio Social); en desarrollo es el comportamiento esperado
@@ -301,3 +307,44 @@ endpoint y controles de rol — no como un placeholder heredado.
 | `.env.production` (local, no versionado) | Agrega las mismas tres variables con su documentación |
 | `client/src/pages/admin/Configuracion.jsx` | Eliminado |
 | `client/src/router/index.jsx`, `client/src/components/layout/Sidebar.jsx` | Retirada la ruta y el enlace a `/admin/configuracion` |
+
+## Sesión 13 — Adjuntos y acceso de alumnos
+
+Cambios con impacto de seguridad. La evidencia de las pruebas (qué se ejecutó de verdad y qué
+solo se leyó) está en [cierre/S13.md](./cierre/S13.md).
+
+**Descarga de adjuntos (`archivos.controller.js`).**
+- Autorización por recurso resuelta desde el JWT para los tres tipos (actividad, entrega, aviso);
+  el Administrador no tiene acceso. Para el Alumno, el adjunto de una actividad usa la misma
+  condición de visibilidad que el listado (`condicionVisibleAlumnoSQL`): una actividad programada
+  aún no publicada responde 404 también por esta ruta.
+- El cliente solo envía `tipo` (lista cerrada) e `id` (entero). El archivo se abre por el nombre
+  almacenado en la base de datos, y la ruta resultante se valida contra `UPLOAD_DIR` con
+  `path.resolve` + `path.relative`; un valor almacenado con `..`, ruta absoluta u otra unidad
+  responde 404.
+- `X-Content-Type-Options: nosniff`; solo PDF/PNG/JPG se sirven `inline` con su tipo real, todo lo
+  demás como `application/octet-stream` + `attachment`. El nombre original (dato del usuario) va
+  codificado en `Content-Disposition` (RFC 5987), sin comillas ni caracteres de control.
+- Registro sin archivo en disco: 404 genérico, sin rutas del servidor.
+
+**Contraseñas temporales.**
+- Aleatorias con `crypto.randomInt` (12 caracteres de un alfabeto de 56, ~69 bits), guardadas solo
+  como hash bcrypt. El texto claro sale una vez en la respuesta HTTP (`Cache-Control: no-store`) y
+  no se escribe en logs ni en correos.
+- Cambio obligatorio aplicado **en el servidor**, no solo en la interfaz: el JWT de una cuenta con
+  contraseña temporal solo sirve para `/api/auth/*` (403 `CAMBIO_CONTRASENA_REQUERIDO` en lo demás).
+- `restablecer-acceso` exige que el alumno esté inscrito en una materia **no cerrada** del profesor
+  que lo pide, e invalida los enlaces de recuperación pendientes.
+
+**Riesgos aceptados / a tener presentes.**
+- Un profesor puede restablecer el acceso de cualquier alumno inscrito en una materia suya, y por
+  tanto obtener una contraseña válida de esa cuenta. Es inherente al mecanismo elegido (el
+  profesor es quien entrega el acceso). Como cualquier profesor puede inscribir a un alumno
+  existente con su boleta o correo, en la práctica **todo profesor puede restablecer a cualquier
+  alumno**. Mitigaciones: el alumno queda forzado a cambiar la contraseña y nota que la suya dejó
+  de servir. No hay bitácora de quién restableció a quién — queda como mejora futura.
+- Los JWT son sin estado: tras `restablecer-acceso`, un token normal que el alumno ya tuviera
+  sigue siendo válido hasta expirar (`JWT_EXPIRES_IN`). La Sesión 16 prevé consultar la base de
+  datos en `auth.middleware.js`; ahí puede cerrarse este hueco.
+- `nodemailer` se fijó en `10.0.10` (sin advisories en `npm audit` a la fecha; las versiones
+  `<= 10.0.5` sí los tienen). Requiere Node.js 20 o superior — la imagen Docker ya usa `node:20`.

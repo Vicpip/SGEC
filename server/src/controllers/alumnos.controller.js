@@ -3,40 +3,54 @@
 // Regla de propiedad: un Profesor solo ve alumnos de materias donde
 // materia.id_profesor = su propio id_profesor (nunca el id_usuario del JWT
 // directamente) — nunca confiar en el parámetro `materia`/`:id` que mande el cliente.
+//
+// Acceso de los alumnos (Sesión 13): al crear una cuenta nueva (alta manual o Excel) o al
+// restablecer el acceso se genera una contraseña temporal aleatoria. Se guarda solo su
+// hash bcrypt y el texto claro se devuelve UNA vez al profesor en el campo `credenciales`
+// de la respuesta; nunca se registra en logs ni viaja por correo. La cuenta queda con
+// debe_cambiar_contrasena = TRUE (ver auth.controller.js). Si hay correo configurado se
+// envía además un enlace de activación, pero el acceso no depende de él.
 
-const crypto = require('crypto')
 const bcrypt = require('bcryptjs')
 const pool = require('../config/db')
 const { parsearAlumnosDesdeExcel, validarAlumno } = require('../services/excel.service')
-const { enviarCorreoRecuperacion } = require('../services/email.service')
-
-const RONDAS_BCRYPT = 10
-const RESET_TOKEN_VIGENCIA_MS = 60 * 60 * 1000 // 1 hora, igual que auth.controller.js
+const { correoHabilitado, enviarCorreoBienvenida } = require('../services/email.service')
+const {
+  RONDAS_BCRYPT,
+  RESET_TOKEN_VIGENCIA_MS,
+  generarTokenReset,
+  generarContrasenaTemporal,
+} = require('../utils/credenciales')
 
 async function obtenerIdProfesorPropio(idUsuario) {
   const [rows] = await pool.query('SELECT id_profesor FROM profesor WHERE id_usuario = ?', [idUsuario])
   return rows[0]?.id_profesor ?? null
 }
 
-function generarTokenReset() {
-  const tokenPlano = crypto.randomBytes(32).toString('hex')
-  const tokenHash = crypto.createHash('sha256').update(tokenPlano).digest('hex')
-  return { tokenPlano, tokenHash }
+// Las respuestas que llevan contraseñas temporales no deben quedar en cachés intermedios.
+function sinCache(res) {
+  res.set('Cache-Control', 'no-store')
 }
 
-// Un alumno recién importado no tiene contraseña conocida por nadie: se le
-// asigna un hash aleatorio (nunca comunicado) y de inmediato se dispara el
-// mismo flujo de recuperación de contraseña que forgotPassword, para que el
-// propio alumno la establezca por correo — nunca una contraseña por defecto
-// predecible (p. ej. la boleta).
+function nombreParaCredencial({ nombre, apellido_paterno, apellido_materno }) {
+  return [apellido_paterno, apellido_materno, nombre].filter(Boolean).join(' ')
+}
+
+// Crea usuario + alumno con una contraseña temporal aleatoria (nunca una predecible,
+// p. ej. la boleta) y cambio obligatorio en el primer inicio de sesión. Devuelve la
+// credencial en claro para que quien llama la entregue al profesor una sola vez, y el
+// token de activación (null si no hay correo configurado) para enviarlo DESPUÉS del
+// commit — nunca se envía un correo por una fila que termina en rollback.
 async function crearAlumnoNuevo(conexion, datos) {
   const { boleta, nombre, apellido_paterno, apellido_materno, correo_institucional, grupo, carrera } = datos
 
-  const contrasenaAleatoria = crypto.randomBytes(24).toString('hex')
-  const hash = await bcrypt.hash(contrasenaAleatoria, RONDAS_BCRYPT)
+  const contrasenaTemporal = generarContrasenaTemporal()
+  const hash = await bcrypt.hash(contrasenaTemporal, RONDAS_BCRYPT)
 
   const [resultUsuario] = await conexion.query(
-    'INSERT INTO usuario (correo_institucional, contrasena_hash, rol, nombre, apellido_paterno, apellido_materno) VALUES (?, ?, ?, ?, ?, ?)',
+    `INSERT INTO usuario
+       (correo_institucional, contrasena_hash, rol, nombre, apellido_paterno, apellido_materno, debe_cambiar_contrasena)
+     VALUES (?, ?, ?, ?, ?, ?, TRUE)`,
     [correo_institucional, hash, 'Alumno', nombre, apellido_paterno, apellido_materno]
   )
   const idUsuario = resultUsuario.insertId
@@ -46,23 +60,47 @@ async function crearAlumnoNuevo(conexion, datos) {
     [idUsuario, boleta, grupo, carrera]
   )
 
-  const { tokenPlano, tokenHash } = generarTokenReset()
-  const expira = new Date(Date.now() + RESET_TOKEN_VIGENCIA_MS)
-  await conexion.query('UPDATE usuario SET reset_token_hash = ?, reset_token_expira = ? WHERE id_usuario = ?', [
-    tokenHash,
-    expira,
-    idUsuario,
-  ])
-  await enviarCorreoRecuperacion(correo_institucional, tokenPlano)
+  let tokenActivacion = null
+  if (correoHabilitado()) {
+    const { tokenPlano, tokenHash } = generarTokenReset()
+    const expira = new Date(Date.now() + RESET_TOKEN_VIGENCIA_MS)
+    await conexion.query('UPDATE usuario SET reset_token_hash = ?, reset_token_expira = ? WHERE id_usuario = ?', [
+      tokenHash,
+      expira,
+      idUsuario,
+    ])
+    tokenActivacion = tokenPlano
+  }
 
-  return resultAlumno.insertId
+  const idAlumno = resultAlumno.insertId
+  return {
+    idAlumno,
+    tokenActivacion,
+    credencial: {
+      id_alumno: idAlumno,
+      boleta,
+      nombre: nombreParaCredencial(datos),
+      correo_institucional,
+      contrasena_temporal: contrasenaTemporal,
+    },
+  }
+}
+
+// Sin await a propósito: el envío no debe retrasar la respuesta ni puede tumbarla
+// (enviarCorreoBienvenida nunca rechaza).
+function enviarBienvenida(nuevo, nombre) {
+  if (nuevo.tokenActivacion) {
+    enviarCorreoBienvenida(nuevo.credencial.correo_institucional, nuevo.tokenActivacion, nombre)
+  }
 }
 
 // POST /api/alumnos — alta manual de un alumno (alternativa a la importación masiva de
 // Sesión 5). Reutiliza validarAlumno (excel.service.js) y crearAlumnoNuevo para aplicar
 // exactamente las mismas reglas de negocio: boleta de 10 dígitos, dominio @alumno.ipn.mx,
 // y alta idempotente cuando la boleta o el correo ya existen (solo se inscribe en la
-// materia si aún no lo estaba, nunca se duplica el alumno).
+// materia si aún no lo estaba, nunca se duplica el alumno). `credenciales` solo trae un
+// elemento cuando la cuenta se creó en esta petición: a un alumno que ya existía NO se le
+// toca la contraseña (para eso está restablecer-acceso, con su propia verificación).
 async function crear(req, res) {
   const { boleta, nombre, apellido_paterno, apellido_materno, correo, grupo, materia: claveMateria } = req.body
 
@@ -103,7 +141,8 @@ async function crear(req, res) {
       [datos.boleta, datos.correo_institucional]
     )
 
-    const idAlumno = existente.length > 0 ? existente[0].id_alumno : await crearAlumnoNuevo(conexion, datos)
+    const nuevo = existente.length > 0 ? null : await crearAlumnoNuevo(conexion, datos)
+    const idAlumno = nuevo ? nuevo.idAlumno : existente[0].id_alumno
 
     const [yaInscrito] = await conexion.query(
       'SELECT id_materia_alumno FROM materia_alumno WHERE id_materia = ? AND id_alumno = ?',
@@ -126,7 +165,10 @@ async function crear(req, res) {
       [idAlumno]
     )
 
-    res.status(201).json({ alumno: alumnoRows[0] })
+    if (nuevo) enviarBienvenida(nuevo, datos.nombre)
+
+    sinCache(res)
+    res.status(201).json({ alumno: alumnoRows[0], credenciales: nuevo ? [nuevo.credencial] : [] })
   } catch (err) {
     await conexion.rollback()
     if (err.code === 'ER_DUP_ENTRY') {
@@ -305,6 +347,7 @@ async function importarExcel(req, res) {
   }
 
   const resultado = { total: filas.length, insertados: 0, inscritos: 0, ya_inscritos: 0, errores: [] }
+  const credenciales = []
 
   for (const fila of filas) {
     if (fila.errores.length > 0) {
@@ -323,13 +366,8 @@ async function importarExcel(req, res) {
         [fila.datos.boleta, fila.datos.correo_institucional]
       )
 
-      let idAlumno
-      if (existente.length > 0) {
-        idAlumno = existente[0].id_alumno
-      } else {
-        idAlumno = await crearAlumnoNuevo(conexion, fila.datos)
-        resultado.insertados++
-      }
+      const nuevo = existente.length > 0 ? null : await crearAlumnoNuevo(conexion, fila.datos)
+      const idAlumno = nuevo ? nuevo.idAlumno : existente[0].id_alumno
 
       const [yaInscrito] = await conexion.query(
         'SELECT id_materia_alumno FROM materia_alumno WHERE id_materia = ? AND id_alumno = ?',
@@ -341,12 +379,19 @@ async function importarExcel(req, res) {
           materiaRow.id_materia,
           idAlumno,
         ])
-        resultado.inscritos++
-      } else {
-        resultado.ya_inscritos++
       }
 
       await conexion.commit()
+
+      // Contadores y credencial se registran solo tras el commit: una fila que revierte
+      // no debe reportar un alumno ni una contraseña que no existen.
+      if (nuevo) {
+        resultado.insertados++
+        credenciales.push(nuevo.credencial)
+        enviarBienvenida(nuevo, fila.datos.nombre)
+      }
+      if (yaInscrito.length === 0) resultado.inscritos++
+      else resultado.ya_inscritos++
     } catch (err) {
       await conexion.rollback()
       const mensaje =
@@ -359,7 +404,70 @@ async function importarExcel(req, res) {
     }
   }
 
-  res.status(200).json({ resultado })
+  sinCache(res)
+  res.status(200).json({ resultado, credenciales })
 }
 
-module.exports = { listar, obtener, crear, importarExcel, actividadesDeAlumno }
+// POST /api/alumnos/:id/restablecer-acceso
+// Regenera la contraseña temporal de un alumno (perdió la anterior, o venció el enlace
+// de activación). Solo el profesor que lo tiene inscrito en una materia suya NO cerrada:
+// una materia de un semestre ya cerrado no da derecho a tocar la cuenta. Invalida además
+// cualquier enlace de activación/recuperación pendiente.
+async function restablecerAcceso(req, res) {
+  const { id } = req.params
+  const idProfesor = await obtenerIdProfesorPropio(req.user.id_usuario)
+
+  const [rows] = await pool.query(
+    `SELECT a.id_alumno, a.boleta, u.id_usuario, u.nombre, u.apellido_paterno, u.apellido_materno,
+            u.correo_institucional, u.activo, u.rol
+     FROM alumno a
+     JOIN usuario u ON u.id_usuario = a.id_usuario
+     WHERE a.id_alumno = ?`,
+    [id]
+  )
+  const alumno = rows[0]
+
+  if (!alumno) {
+    return res.status(404).json({ error: 'Alumno no encontrado' })
+  }
+
+  const [compartido] = await pool.query(
+    `SELECT 1 FROM materia_alumno ma
+     JOIN materia m ON m.id_materia = ma.id_materia
+     WHERE ma.id_alumno = ? AND m.id_profesor = ? AND m.estatus != 'Cerrada' LIMIT 1`,
+    [id, idProfesor]
+  )
+
+  if (compartido.length === 0) {
+    return res.status(403).json({ error: 'No tienes permiso para restablecer el acceso de este alumno' })
+  }
+
+  if (alumno.rol !== 'Alumno' || !alumno.activo) {
+    return res.status(409).json({ error: 'La cuenta del alumno está inactiva' })
+  }
+
+  const contrasenaTemporal = generarContrasenaTemporal()
+  const hash = await bcrypt.hash(contrasenaTemporal, RONDAS_BCRYPT)
+
+  await pool.query(
+    `UPDATE usuario
+     SET contrasena_hash = ?, debe_cambiar_contrasena = TRUE, reset_token_hash = NULL, reset_token_expira = NULL
+     WHERE id_usuario = ?`,
+    [hash, alumno.id_usuario]
+  )
+
+  sinCache(res)
+  res.status(200).json({
+    credenciales: [
+      {
+        id_alumno: alumno.id_alumno,
+        boleta: alumno.boleta,
+        nombre: nombreParaCredencial(alumno),
+        correo_institucional: alumno.correo_institucional,
+        contrasena_temporal: contrasenaTemporal,
+      },
+    ],
+  })
+}
+
+module.exports = { listar, obtener, crear, importarExcel, actividadesDeAlumno, restablecerAcceso }

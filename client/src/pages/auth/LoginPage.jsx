@@ -11,7 +11,7 @@ import * as authService from '../../services/auth.service'
 import { rutaDashboardPorRol } from '../../utils/roleRoutes'
 
 export default function LoginPage() {
-  const { login, isAuthenticated, rol: rolAutenticado } = useAuth()
+  const { login, isAuthenticated, rol: rolAutenticado, debeCambiarContrasena } = useAuth()
 
   const [rol, setRol] = useState('Profesor')
   const [correo, setCorreo] = useState('')
@@ -21,7 +21,7 @@ export default function LoginPage() {
   const [error, setError] = useState('')
 
   if (isAuthenticated) {
-    return <Navigate to={rutaDashboardPorRol(rolAutenticado)} replace />
+    return <Navigate to={debeCambiarContrasena ? '/perfil' : rutaDashboardPorRol(rolAutenticado)} replace />
   }
 
   function cambiarRol(nuevoRol) {

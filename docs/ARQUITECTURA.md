@@ -16,7 +16,7 @@ de reportes de desempeño. Tres roles: Administrador, Profesor, Alumno.
 | Capa | Tecnología |
 |---|---|
 | Frontend | React 18 + Vite 5, react-router-dom 6, @tanstack/react-query 5, axios, lucide-react, recharts |
-| Backend | Node.js 18+ · Express 4 |
+| Backend | Node.js 20+ · Express 4 |
 | Base de datos | MySQL 8 (mysql2/promise, pool de conexiones) |
 | Autenticación | JWT (jsonwebtoken) + bcryptjs, validación de body con Joi |
 | Import/Export | xlsx (SheetJS) para importar alumnos; pdfkit + xlsx para reportes |
@@ -68,8 +68,10 @@ Servicios de negocio en `server/src/services/`:
 - **publicacion.service.js** — determina si una actividad programada ya es visible al alumno
   (a nivel de condición SQL, no solo en memoria — ver [API.md](./API.md#actividades)).
 - **usuarios.service.js** — datos extendidos de profesor/alumno que complementan a `usuario`.
-- **email.service.js** — actualmente un stub que registra en consola el enlace de recuperación
-  de contraseña (no hay proveedor SMTP integrado — ver [SECURITY.md](./SECURITY.md)).
+- **email.service.js** — correo saliente por SMTP con nodemailer, **opcional**: sin `SMTP_HOST`
+  no envía nada y ningún flujo se rompe. Envía el enlace de recuperación de contraseña y el
+  correo de bienvenida con enlace de activación; nunca registra cuerpos, enlaces ni tokens
+  (`EMAIL_DRY_RUN=true` solo registra destinatario y asunto).
 
 ## Modelo de datos (16 tablas)
 
@@ -135,11 +137,18 @@ usuario (1) ── (1) profesor ── (N) materia ── (N) equipo ── (N) 
   y ese valor ancla el `WHERE` de la consulta. Ver el detalle de esta verificación por endpoint
   en [SECURITY.md](./SECURITY.md#2-filtrado-por-propiedad-del-recurso).
 
-## Limitación conocida: sin descarga de archivos adjuntos
+## Descarga de archivos adjuntos (Sesión 13)
 
-`archivo_actividad`, `archivo_entrega` y `archivo_aviso` guardan `ruta_archivo` en la base de
-datos y los binarios se persisten en `server/uploads/`, pero **no existe ningún endpoint** que
-sirva esos archivos de vuelta (no hay `express.static`, ni una ruta `GET .../archivos/:id`). El
-profesor/alumno puede ver el nombre del archivo adjunto en la respuesta JSON, pero no descargarlo.
-No se agregó en la Sesión 12 por estar fuera de su alcance ("no se agregan features nuevas");
-queda como trabajo pendiente para una sesión futura.
+`archivo_actividad`, `archivo_entrega` y `archivo_aviso` guardan en `ruta_archivo` el nombre que
+multer generó al subir y los binarios se persisten en `UPLOAD_DIR`. Se sirven únicamente por
+`GET /api/archivos/:tipo/:id` (`archivos.controller.js`), que comprueba la propiedad del recurso
+antes de abrir el archivo — no hay `express.static` sobre la carpeta de uploads. Detalle de
+permisos y cabeceras en [API.md](./API.md#archivos).
+
+## Acceso de los alumnos (Sesión 13)
+
+El alta manual, la importación Excel y "Restablecer acceso" generan una contraseña temporal que
+el profesor ve una sola vez y entrega al alumno; la cuenta queda con
+`usuario.debe_cambiar_contrasena = TRUE` hasta que el alumno la cambia (el frontend lo lleva a
+`/perfil` y la API rechaza todo salvo `/api/auth/*`). El correo de activación es un complemento
+opcional: el acceso nunca depende de que haya SMTP configurado.

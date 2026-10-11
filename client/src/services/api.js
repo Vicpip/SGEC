@@ -15,7 +15,10 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    // change-password responde 401 cuando la contraseña ACTUAL es incorrecta: eso no
+    // significa que la sesión haya expirado, así que no debe cerrar la sesión.
+    const esCambioContrasena = error.config?.url === '/auth/change-password'
+    if (error.response?.status === 401 && !esCambioContrasena) {
       localStorage.removeItem('sgec_token')
       localStorage.removeItem('sgec_user')
       if (window.location.pathname !== '/login') {

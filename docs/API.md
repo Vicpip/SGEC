@@ -21,12 +21,18 @@ general de `/api`: `/login` 5 intentos/15 min, `/forgot-password` 3 intentos/15 
 
 | Método | Ruta | Rol | Body / params | Respuestas |
 |---|---|---|---|---|
-| POST | `/auth/login` | Público | `{correo_institucional, contrasena, rol}` | 200 `{token, usuario}`; 400 dominio de correo no corresponde al rol; 401 credenciales inválidas; 403 cuenta inactiva; 429 demasiados intentos |
-| GET | `/auth/me` | Autenticado | — | 200 `{usuario}`; 401 usuario inactivo o eliminado |
+| POST | `/auth/login` | Público | `{correo_institucional, contrasena, rol}` | 200 `{token, usuario}` (`usuario.debe_cambiar_contrasena` indica contraseña temporal pendiente de cambio); 400 dominio de correo no corresponde al rol; 401 credenciales inválidas; 403 cuenta inactiva; 429 demasiados intentos |
+| GET | `/auth/me` | Autenticado | — | 200 `{usuario}` (incluye `debe_cambiar_contrasena`); 401 usuario inactivo o eliminado |
 | POST | `/auth/logout` | Autenticado | — | 200 `{message}` (stateless: solo confirma, el cliente descarta el token) |
 | POST | `/auth/forgot-password` | Público | `{correo_institucional}` | 200 siempre `{message}` genérico (no revela si el correo existe); 429 |
-| POST | `/auth/reset-password` | Público | `{token, nueva_contrasena}` | 200 `{message}`; 400 token inválido o expirado (vigencia 1h) |
-| PATCH | `/auth/change-password` | Autenticado | `{contrasena_actual, nueva_contrasena}` | 200 `{message}`; 401 contraseña actual incorrecta |
+| POST | `/auth/reset-password` | Público | `{token, nueva_contrasena}` | 200 `{message}` (pone `debe_cambiar_contrasena` en FALSE); 400 token inválido o expirado (vigencia 24 h) |
+| PATCH | `/auth/change-password` | Autenticado | `{contrasena_actual, nueva_contrasena}` | 200 `{message, token, debe_cambiar_contrasena: false}` (el cliente debe reemplazar su token por el nuevo); 400 la nueva es igual a la actual; 401 contraseña actual incorrecta |
+
+**Cambio obligatorio de contraseña.** Las cuentas de alumno creadas por un profesor (alta manual,
+importación o `restablecer-acceso`) quedan con `usuario.debe_cambiar_contrasena = TRUE`. El JWT
+que emite `/auth/login` para esas cuentas lleva el indicador y, mientras lo lleve,
+`auth.middleware.js` responde **403** `{error, codigo: "CAMBIO_CONTRASENA_REQUERIDO"}` en toda
+ruta que no sea `/api/auth/*`. `change-password` apaga el indicador y devuelve un token nuevo.
 
 `nueva_contrasena` exige mínimo 8 caracteres, al menos una mayúscula y un número (Joi, mismo
 criterio que el copy de Perfil.jsx). El login valida el dominio del correo contra el rol elegido
@@ -81,12 +87,22 @@ Pantallas 07, 08, 09. Un Profesor solo ve alumnos de materias donde es dueño.
 | GET | `/alumnos?materia=<clave>` | Profesor | — | 200 `{alumnos, materia}`; 400 falta `materia`; 404 materia no encontrada/no propia |
 | GET | `/alumnos/:id` | Profesor (con materia compartida) | — | 200 `{alumno}`; 403 sin materia en común; 404 |
 | GET | `/alumnos/:id/actividades` | Profesor (con materia compartida) | — | 200 `{alumno, actividades}` (incluye equipo y calificación por actividad); 403; 404 |
-| POST | `/alumnos/importar` | Profesor | multipart: `archivo` (.xlsx/.xls, multer memoria, `MAX_FILE_SIZE_MB`, 1 archivo), `materia` (clave) | 200 `{resultado: {total, insertados, inscritos, ya_inscritos, errores: [{fila, errores}]}}`; 400 archivo inválido/falta materia; 404 materia no propia |
+| POST | `/alumnos` | Profesor | `{boleta, nombre, apellido_paterno, apellido_materno?, correo, grupo, materia}` (`materia` = clave) | 201 `{alumno, credenciales}`; 400 datos inválidos; 404 materia no propia; 409 boleta/correo en conflicto |
+| POST | `/alumnos/importar` | Profesor | multipart: `archivo` (.xlsx/.xls, multer memoria, `MAX_FILE_SIZE_MB`, 1 archivo), `materia` (clave) | 200 `{resultado: {total, insertados, inscritos, ya_inscritos, errores: [{fila, errores}]}, credenciales}`; 400 archivo inválido/falta materia; 404 materia no propia |
+| POST | `/alumnos/:id/restablecer-acceso` | Profesor con el alumno inscrito en una materia suya no cerrada | — | 200 `{credenciales}` (1 elemento); 403 sin materia activa en común; 404 alumno inexistente; 409 cuenta inactiva |
 
 `importar` valida fila por fila (boleta 10 dígitos, correo `@alumno.ipn.mx`, columnas
-requeridas) y nunca aborta el archivo completo por una fila inválida. Un alumno nuevo recibe
-una contraseña aleatoria nunca comunicada y de inmediato se le dispara el flujo de
-recuperación de contraseña para que la establezca por correo.
+requeridas) y nunca aborta el archivo completo por una fila inválida.
+
+**Contraseñas temporales (`credenciales`).** Cada cuenta de alumno **nueva** recibe una
+contraseña temporal aleatoria (12 caracteres legibles en tres bloques, ej. `Xk7m-Qp4T-b9Wd`)
+que se guarda solo como hash bcrypt. El texto claro se devuelve **una única vez** en
+`credenciales: [{id_alumno, boleta, nombre, correo_institucional, contrasena_temporal}]`; la
+respuesta lleva `Cache-Control: no-store`. Un alumno que ya existía (misma boleta o correo)
+solo se inscribe en la materia: no aparece en `credenciales` ni se le toca la contraseña.
+`restablecer-acceso` regenera la temporal, vuelve a exigir el cambio e invalida cualquier
+enlace de activación/recuperación pendiente. Si hay SMTP configurado, el alta y la importación
+envían además un correo de bienvenida con un enlace de activación (nunca la contraseña).
 
 ## equipos
 
@@ -189,3 +205,29 @@ llega a "encontrarla").
 
 Cada fila de `equipos` trae los 6 campos requeridos: profesor, unidad de aprendizaje (materia),
 nombre del equipo, integrantes, promedio obtenido, % actividades realizadas / no realizadas.
+
+## archivos
+
+Descarga de adjuntos. El archivo se localiza por el nombre almacenado en la base de datos y se
+resuelve siempre dentro de `UPLOAD_DIR`; el cliente solo manda el tipo y el id.
+
+| Método | Ruta | Rol | Body / params | Respuestas |
+|---|---|---|---|---|
+| GET | `/archivos/:tipo/:id` | Profesor / Alumno (según tipo) | `tipo` = `actividad`, `entrega` o `aviso`; `id` = PK de `archivo_actividad` / `archivo_entrega` / `archivo_aviso` | 200 el archivo; 403 sin permiso; 404 tipo/id inexistente, actividad no visible para el alumno, o archivo faltante en disco |
+
+Permisos por tipo:
+
+- **actividad** — Profesor dueño de la materia. Alumno: inscrito en la materia, actividad activa,
+  ya publicada (misma condición SQL que el listado; una programada futura responde 404) y
+  dirigida a todos los equipos o a un equipo suyo.
+- **entrega** — Profesor dueño de la materia. Alumno autor; sus compañeros del equipo de esa
+  entrega solo si la actividad tiene `entrega_por_equipo = TRUE`.
+- **aviso** — Profesor autor. Alumno que puede ver el aviso (inscrito en su materia o, si es
+  global, en alguna materia no cerrada de ese profesor).
+- El Administrador no descarga adjuntos (403).
+
+Cabeceras de la respuesta: `X-Content-Type-Options: nosniff`, `Cache-Control: private, no-store`,
+`Content-Disposition: inline` solo para PDF/PNG/JPG y `attachment` (con
+`Content-Type: application/octet-stream`) para todo lo demás. Como el token viaja en el header
+`Authorization`, el frontend descarga con axios en modo `blob` (`ArchivoLink.jsx`), no con un
+`<a href>` directo.
