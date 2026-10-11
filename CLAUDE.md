@@ -281,7 +281,7 @@ repo). El resumen de cada una vive en `docs/cierre/S<N>.md`.
 
 | Sesión | Tema | Estado | Commit |
 |--------|------|--------|--------|
-| S13 | Adjuntos y acceso de alumnos | ✅ Completa | HASH_S13 |
+| S13 | Adjuntos y acceso de alumnos | ✅ Completa | 9dfcbf5 |
 | S14 | ABC completo y tipo de evaluación | ⏳ Pendiente | — |
 | S15 | Equipos espejo, reporte y panel del alumno | ⏳ Pendiente | — |
 | S16 | Hardening de producción | ⏳ Pendiente | — |
