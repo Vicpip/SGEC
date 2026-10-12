@@ -86,6 +86,36 @@ async function crearAlumnoNuevo(conexion, datos) {
   }
 }
 
+// Busca una cuenta de alumno ya registrada con esa boleta o ese correo. Un alumno es una
+// cuenta global (puede cursar materias de varios profesores), así que el alta de uno que
+// ya existe solo lo inscribe: nunca se sobrescriben su nombre, correo, grupo ni contraseña.
+// Solo se considera "el mismo alumno" si coinciden boleta Y correo; si coincide uno solo,
+// los datos capturados chocan con una cuenta ajena y se rechaza (409) sin revelar los
+// datos de esa cuenta.
+// Devuelve { idAlumno } | { conflicto: mensaje } | null (no existe).
+async function buscarAlumnoExistente(conexion, { boleta, correo_institucional }) {
+  const [rows] = await conexion.query(
+    `SELECT a.id_alumno, a.boleta, u.correo_institucional
+     FROM alumno a
+     JOIN usuario u ON u.id_usuario = a.id_usuario
+     WHERE a.boleta = ? OR u.correo_institucional = ?`,
+    [boleta, correo_institucional]
+  )
+
+  if (rows.length === 0) return null
+
+  const mismoCorreo = (row) => row.correo_institucional.toLowerCase() === correo_institucional
+  const exacto = rows.length === 1 && rows[0].boleta === boleta && mismoCorreo(rows[0])
+  if (exacto) return { idAlumno: rows[0].id_alumno }
+
+  const boletaOcupada = rows.some((row) => row.boleta === boleta)
+  return {
+    conflicto: boletaOcupada
+      ? 'La boleta ya está registrada con otro correo institucional'
+      : 'El correo institucional ya está registrado con otra boleta',
+  }
+}
+
 // Sin await a propósito: el envío no debe retrasar la respuesta ni puede tumbarla
 // (enviarCorreoBienvenida nunca rechaza).
 function enviarBienvenida(nuevo, nombre) {
@@ -134,15 +164,14 @@ async function crear(req, res) {
   try {
     await conexion.beginTransaction()
 
-    const [existente] = await conexion.query(
-      `SELECT a.id_alumno FROM alumno a
-       JOIN usuario u ON u.id_usuario = a.id_usuario
-       WHERE a.boleta = ? OR u.correo_institucional = ?`,
-      [datos.boleta, datos.correo_institucional]
-    )
+    const existente = await buscarAlumnoExistente(conexion, datos)
+    if (existente?.conflicto) {
+      await conexion.rollback()
+      return res.status(409).json({ error: existente.conflicto })
+    }
 
-    const nuevo = existente.length > 0 ? null : await crearAlumnoNuevo(conexion, datos)
-    const idAlumno = nuevo ? nuevo.idAlumno : existente[0].id_alumno
+    const nuevo = existente ? null : await crearAlumnoNuevo(conexion, datos)
+    const idAlumno = nuevo ? nuevo.idAlumno : existente.idAlumno
 
     const [yaInscrito] = await conexion.query(
       'SELECT id_materia_alumno FROM materia_alumno WHERE id_materia = ? AND id_alumno = ?',
@@ -359,15 +388,15 @@ async function importarExcel(req, res) {
     try {
       await conexion.beginTransaction()
 
-      const [existente] = await conexion.query(
-        `SELECT a.id_alumno FROM alumno a
-         JOIN usuario u ON u.id_usuario = a.id_usuario
-         WHERE a.boleta = ? OR u.correo_institucional = ?`,
-        [fila.datos.boleta, fila.datos.correo_institucional]
-      )
+      const existente = await buscarAlumnoExistente(conexion, fila.datos)
+      if (existente?.conflicto) {
+        await conexion.rollback()
+        resultado.errores.push({ fila: fila.numero_fila, errores: [existente.conflicto] })
+        continue
+      }
 
-      const nuevo = existente.length > 0 ? null : await crearAlumnoNuevo(conexion, fila.datos)
-      const idAlumno = nuevo ? nuevo.idAlumno : existente[0].id_alumno
+      const nuevo = existente ? null : await crearAlumnoNuevo(conexion, fila.datos)
+      const idAlumno = nuevo ? nuevo.idAlumno : existente.idAlumno
 
       const [yaInscrito] = await conexion.query(
         'SELECT id_materia_alumno FROM materia_alumno WHERE id_materia = ? AND id_alumno = ?',
@@ -410,16 +439,24 @@ async function importarExcel(req, res) {
 
 // POST /api/alumnos/:id/restablecer-acceso
 // Regenera la contraseña temporal de un alumno (perdió la anterior, o venció el enlace
-// de activación). Solo el profesor que lo tiene inscrito en una materia suya NO cerrada:
-// una materia de un semestre ya cerrado no da derecho a tocar la cuenta. Invalida además
-// cualquier enlace de activación/recuperación pendiente.
+// de activación). Invalida además cualquier enlace de activación/recuperación pendiente.
+//
+// Quién puede hacerlo:
+//   - Profesor: solo si tiene al alumno inscrito en una materia suya NO cerrada (una
+//     materia de un semestre pasado no da derecho a tocar la cuenta) Y el alumno todavía
+//     no activó su cuenta (debe_cambiar_contrasena = TRUE). Sin esta segunda condición,
+//     cualquier profesor podría tomar la cuenta de cualquier alumno con solo inscribirlo
+//     en una materia propia. Si el alumno ya eligió su contraseña: 409.
+//   - Administrador: cualquier alumno con cuenta activa.
+// Cada restablecimiento queda en el log del servidor (quién, a qué alumno, cuándo), sin
+// contraseñas ni correos.
 async function restablecerAcceso(req, res) {
   const { id } = req.params
-  const idProfesor = await obtenerIdProfesorPropio(req.user.id_usuario)
+  const esAdministrador = req.user.rol === 'Administrador'
 
   const [rows] = await pool.query(
     `SELECT a.id_alumno, a.boleta, u.id_usuario, u.nombre, u.apellido_paterno, u.apellido_materno,
-            u.correo_institucional, u.activo, u.rol
+            u.correo_institucional, u.activo, u.rol, u.debe_cambiar_contrasena
      FROM alumno a
      JOIN usuario u ON u.id_usuario = a.id_usuario
      WHERE a.id_alumno = ?`,
@@ -431,19 +468,30 @@ async function restablecerAcceso(req, res) {
     return res.status(404).json({ error: 'Alumno no encontrado' })
   }
 
-  const [compartido] = await pool.query(
-    `SELECT 1 FROM materia_alumno ma
-     JOIN materia m ON m.id_materia = ma.id_materia
-     WHERE ma.id_alumno = ? AND m.id_profesor = ? AND m.estatus != 'Cerrada' LIMIT 1`,
-    [id, idProfesor]
-  )
+  if (!esAdministrador) {
+    const idProfesor = await obtenerIdProfesorPropio(req.user.id_usuario)
+    const [compartido] = await pool.query(
+      `SELECT 1 FROM materia_alumno ma
+       JOIN materia m ON m.id_materia = ma.id_materia
+       WHERE ma.id_alumno = ? AND m.id_profesor = ? AND m.estatus != 'Cerrada' LIMIT 1`,
+      [id, idProfesor]
+    )
 
-  if (compartido.length === 0) {
-    return res.status(403).json({ error: 'No tienes permiso para restablecer el acceso de este alumno' })
+    if (compartido.length === 0) {
+      return res.status(403).json({ error: 'No tienes permiso para restablecer el acceso de este alumno' })
+    }
   }
 
   if (alumno.rol !== 'Alumno' || !alumno.activo) {
     return res.status(409).json({ error: 'La cuenta del alumno está inactiva' })
+  }
+
+  if (!esAdministrador && !alumno.debe_cambiar_contrasena) {
+    return res.status(409).json({
+      error:
+        'El alumno ya activó su cuenta y eligió su contraseña. Debe usar "Olvidé mi contraseña" o pedir el restablecimiento al Administrador',
+      codigo: 'CUENTA_YA_ACTIVADA',
+    })
   }
 
   const contrasenaTemporal = generarContrasenaTemporal()
@@ -454,6 +502,10 @@ async function restablecerAcceso(req, res) {
      SET contrasena_hash = ?, debe_cambiar_contrasena = TRUE, reset_token_hash = NULL, reset_token_expira = NULL
      WHERE id_usuario = ?`,
     [hash, alumno.id_usuario]
+  )
+
+  console.log(
+    `[alumnos] restablecer-acceso: usuario ${req.user.id_usuario} (${req.user.rol}) -> alumno ${alumno.id_alumno} | ${new Date().toISOString()}`
   )
 
   sinCache(res)

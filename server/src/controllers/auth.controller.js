@@ -180,7 +180,9 @@ async function changePassword(req, res) {
 
   const contrasenaValida = await bcrypt.compare(contrasena_actual, usuario.contrasena_hash)
   if (!contrasenaValida) {
-    return res.status(401).json({ error: 'La contraseña actual es incorrecta' })
+    // El código distingue este 401 del de un token vencido o inválido (auth.middleware.js):
+    // el frontend solo cierra la sesión en el segundo caso (ver client/src/services/api.js).
+    return res.status(401).json({ error: 'La contraseña actual es incorrecta', codigo: 'CONTRASENA_ACTUAL_INCORRECTA' })
   }
 
   if (contrasena_actual === nueva_contrasena) {

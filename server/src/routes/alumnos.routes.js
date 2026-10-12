@@ -46,13 +46,20 @@ function subirExcel(req, res, next) {
 const router = Router()
 
 router.use(authMiddleware)
-router.use(requireRole('Profesor'))
 
-router.get('/', asyncHandler(alumnosController.listar))
-router.get('/:id', asyncHandler(alumnosController.obtener))
-router.get('/:id/actividades', asyncHandler(alumnosController.actividadesDeAlumno))
-router.post('/', validateBody(crearAlumnoSchema), asyncHandler(alumnosController.crear))
-router.post('/importar', subirExcel, asyncHandler(alumnosController.importarExcel))
-router.post('/:id/restablecer-acceso', asyncHandler(alumnosController.restablecerAcceso))
+// El rol va por ruta (no con router.use) porque restablecer-acceso también admite al
+// Administrador; el resto del módulo es exclusivo del Profesor.
+const soloProfesor = requireRole('Profesor')
+
+router.get('/', soloProfesor, asyncHandler(alumnosController.listar))
+router.get('/:id', soloProfesor, asyncHandler(alumnosController.obtener))
+router.get('/:id/actividades', soloProfesor, asyncHandler(alumnosController.actividadesDeAlumno))
+router.post('/', soloProfesor, validateBody(crearAlumnoSchema), asyncHandler(alumnosController.crear))
+router.post('/importar', soloProfesor, subirExcel, asyncHandler(alumnosController.importarExcel))
+router.post(
+  '/:id/restablecer-acceso',
+  requireRole('Profesor', 'Administrador'),
+  asyncHandler(alumnosController.restablecerAcceso)
+)
 
 module.exports = router

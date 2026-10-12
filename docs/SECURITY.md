@@ -334,15 +334,25 @@ solo se leyó) está en [cierre/S13.md](./cierre/S13.md).
 - Cambio obligatorio aplicado **en el servidor**, no solo en la interfaz: el JWT de una cuenta con
   contraseña temporal solo sirve para `/api/auth/*` (403 `CAMBIO_CONTRASENA_REQUERIDO` en lo demás).
 - `restablecer-acceso` exige que el alumno esté inscrito en una materia **no cerrada** del profesor
-  que lo pide, e invalida los enlaces de recuperación pendientes.
+  que lo pide **y que todavía no haya activado su cuenta** (`debe_cambiar_contrasena = TRUE`); en
+  otro caso responde 409. El Administrador puede restablecer a cualquier alumno. Invalida los
+  enlaces de recuperación pendientes y deja una línea en el log del servidor (quién, a qué alumno,
+  cuándo; sin contraseñas ni correos).
+- El alta de un alumno que ya existe exige que coincidan boleta **y** correo; solo lo inscribe y
+  nunca sobrescribe datos de la cuenta. Boleta con otro correo (o al revés): 409.
+- El transporte SMTP tiene límites de DNS, conexión, saludo y socket (10–20 s): un servidor de
+  correo caído o mal configurado no deja envíos colgados. Los envíos van sin `await`, así que no
+  retrasan ni tumban el alta, la importación ni "olvidé mi contraseña".
 
 **Riesgos aceptados / a tener presentes.**
-- Un profesor puede restablecer el acceso de cualquier alumno inscrito en una materia suya, y por
-  tanto obtener una contraseña válida de esa cuenta. Es inherente al mecanismo elegido (el
-  profesor es quien entrega el acceso). Como cualquier profesor puede inscribir a un alumno
-  existente con su boleta o correo, en la práctica **todo profesor puede restablecer a cualquier
-  alumno**. Mitigaciones: el alumno queda forzado a cambiar la contraseña y nota que la suya dejó
-  de servir. No hay bitácora de quién restableció a quién — queda como mejora futura.
+- **Corregido en la Sesión 14.** Antes, un profesor podía restablecer el acceso de cualquier
+  alumno con solo inscribirlo en una materia propia. Ahora solo procede si el alumno aún no
+  activó su cuenta; queda un riesgo residual acotado: mientras la cuenta siga sin activar, un
+  profesor que la tenga inscrita puede regenerar la temporal (es el mecanismo previsto para
+  entregar el acceso) y el restablecimiento queda en el log.
+- El Administrador puede restablecer a cualquier alumno, pero **no hay pantalla para ello**: solo
+  existe el endpoint. Hasta que se agregue, el camino normal de un alumno ya activado es "Olvidé
+  mi contraseña", que depende de que el correo SMTP esté configurado.
 - Los JWT son sin estado: tras `restablecer-acceso`, un token normal que el alumno ya tuviera
   sigue siendo válido hasta expirar (`JWT_EXPIRES_IN`). La Sesión 16 prevé consultar la base de
   datos en `auth.middleware.js`; ahí puede cerrarse este hueco.

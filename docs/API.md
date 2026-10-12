@@ -26,7 +26,7 @@ general de `/api`: `/login` 5 intentos/15 min, `/forgot-password` 3 intentos/15 
 | POST | `/auth/logout` | Autenticado | — | 200 `{message}` (stateless: solo confirma, el cliente descarta el token) |
 | POST | `/auth/forgot-password` | Público | `{correo_institucional}` | 200 siempre `{message}` genérico (no revela si el correo existe); 429 |
 | POST | `/auth/reset-password` | Público | `{token, nueva_contrasena}` | 200 `{message}` (pone `debe_cambiar_contrasena` en FALSE); 400 token inválido o expirado (vigencia 24 h) |
-| PATCH | `/auth/change-password` | Autenticado | `{contrasena_actual, nueva_contrasena}` | 200 `{message, token, debe_cambiar_contrasena: false}` (el cliente debe reemplazar su token por el nuevo); 400 la nueva es igual a la actual; 401 contraseña actual incorrecta |
+| PATCH | `/auth/change-password` | Autenticado | `{contrasena_actual, nueva_contrasena}` | 200 `{message, token, debe_cambiar_contrasena: false}` (el cliente debe reemplazar su token por el nuevo); 400 la nueva es igual a la actual; 401 `codigo: CONTRASENA_ACTUAL_INCORRECTA` si la contraseña actual no coincide (el cliente no cierra la sesión); 401 sin `codigo` si el token es inválido o expiró (el cliente sí la cierra) |
 
 **Cambio obligatorio de contraseña.** Las cuentas de alumno creadas por un profesor (alta manual,
 importación o `restablecer-acceso`) quedan con `usuario.debe_cambiar_contrasena = TRUE`. El JWT
@@ -89,7 +89,7 @@ Pantallas 07, 08, 09. Un Profesor solo ve alumnos de materias donde es dueño.
 | GET | `/alumnos/:id/actividades` | Profesor (con materia compartida) | — | 200 `{alumno, actividades}` (incluye equipo y calificación por actividad); 403; 404 |
 | POST | `/alumnos` | Profesor | `{boleta, nombre, apellido_paterno, apellido_materno?, correo, grupo, materia}` (`materia` = clave) | 201 `{alumno, credenciales}`; 400 datos inválidos; 404 materia no propia; 409 boleta/correo en conflicto |
 | POST | `/alumnos/importar` | Profesor | multipart: `archivo` (.xlsx/.xls, multer memoria, `MAX_FILE_SIZE_MB`, 1 archivo), `materia` (clave) | 200 `{resultado: {total, insertados, inscritos, ya_inscritos, errores: [{fila, errores}]}, credenciales}`; 400 archivo inválido/falta materia; 404 materia no propia |
-| POST | `/alumnos/:id/restablecer-acceso` | Profesor con el alumno inscrito en una materia suya no cerrada | — | 200 `{credenciales}` (1 elemento); 403 sin materia activa en común; 404 alumno inexistente; 409 cuenta inactiva |
+| POST | `/alumnos/:id/restablecer-acceso` | Profesor con el alumno inscrito en una materia suya no cerrada **y solo si el alumno aún no activó su cuenta**; Administrador (cualquier alumno) | — | 200 `{credenciales}` (1 elemento); 403 sin materia activa en común; 404 alumno inexistente; 409 cuenta inactiva; 409 `codigo: CUENTA_YA_ACTIVADA` si lo pide un Profesor y el alumno ya eligió su contraseña |
 
 `importar` valida fila por fila (boleta 10 dígitos, correo `@alumno.ipn.mx`, columnas
 requeridas) y nunca aborta el archivo completo por una fila inválida.
@@ -98,10 +98,15 @@ requeridas) y nunca aborta el archivo completo por una fila inválida.
 contraseña temporal aleatoria (12 caracteres legibles en tres bloques, ej. `Xk7m-Qp4T-b9Wd`)
 que se guarda solo como hash bcrypt. El texto claro se devuelve **una única vez** en
 `credenciales: [{id_alumno, boleta, nombre, correo_institucional, contrasena_temporal}]`; la
-respuesta lleva `Cache-Control: no-store`. Un alumno que ya existía (misma boleta o correo)
-solo se inscribe en la materia: no aparece en `credenciales` ni se le toca la contraseña.
+respuesta lleva `Cache-Control: no-store`. Un alumno que ya existía (misma boleta **y** mismo
+correo) solo se inscribe en la materia: no aparece en `credenciales` y no se le modifica nombre,
+correo, grupo, carrera ni contraseña. Si coincide solo la boleta o solo el correo, el alta
+responde 409 (y la importación reporta el error en esa fila) sin revelar los datos de la cuenta.
 `restablecer-acceso` regenera la temporal, vuelve a exigir el cambio e invalida cualquier
-enlace de activación/recuperación pendiente. Si hay SMTP configurado, el alta y la importación
+enlace de activación/recuperación pendiente. Un Profesor solo puede usarlo mientras el alumno no
+haya activado su cuenta (`debe_cambiar_contrasena = TRUE`); después, el alumno usa "Olvidé mi
+contraseña" o lo restablece el Administrador. Cada restablecimiento se registra en el log del
+servidor (id de quien lo pidió, rol, id del alumno y fecha). Si hay SMTP configurado, el alta y la importación
 envían además un correo de bienvenida con un enlace de activación (nunca la contraseña).
 
 ## equipos

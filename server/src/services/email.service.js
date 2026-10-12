@@ -29,6 +29,12 @@ function obtenerTransporte() {
       auth: env.smtp.user ? { user: env.smtp.user, pass: env.smtp.pass } : undefined,
       pool: true,
       maxConnections: 2,
+      // Sin estos límites, un SMTP_HOST mal escrito o caído deja cada envío colgado
+      // durante minutos (los valores por defecto de nodemailer llegan a 10 min).
+      dnsTimeout: 10000,
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 20000,
     })
   }
   return transporte
