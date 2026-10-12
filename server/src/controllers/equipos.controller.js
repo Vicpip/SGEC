@@ -1,4 +1,12 @@
-// Equipos colaborativos (3 integrantes, sin repetición por tipo). Pantallas 04, 05, 06.
+// Equipos colaborativos (sin repetición por tipo). Pantallas 04, 05, 06.
+//
+// Tamaño: la asignación automática forma equipos de exactamente 3; el alta y la edición
+// manual admiten 3 o 4 integrantes (lo valida equipos.validators.js).
+//
+// Espejo Práctica/Tarea: un equipo de Práctica o de Tarea existe como dos filas de `equipo`
+// (una por tipo, mismos integrantes) enlazadas por equipo.id_equipo_espejo. Toda escritura
+// (crear, editar nombre/integrantes, desactivar) opera sobre ambas filas en una sola
+// transacción; nunca se emparejan por nombre. Un equipo de Proyecto no tiene espejo.
 //
 // Regla de propiedad: un Profesor solo ve/crea/edita/desactiva equipos de materias donde
 // materia.id_profesor = su propio id_profesor (nunca el id_usuario del JWT directamente).
@@ -6,7 +14,7 @@
 // id_alumno).
 
 const pool = require('../config/db')
-const { asignarEquiposAleatorio, tiposEspejo } = require('../services/asignacion.service')
+const { asignarEquiposAleatorio, tiposEspejo, tipoEspejoDe } = require('../services/asignacion.service')
 
 async function obtenerIdProfesorPropio(idUsuario) {
   const [rows] = await pool.query('SELECT id_profesor FROM profesor WHERE id_usuario = ?', [idUsuario])
@@ -48,22 +56,60 @@ async function integrantesDeEquipos(idsEquipo) {
 
 // Alumnos que ya tienen un equipo ACTIVO de alguno de los tipos "espejo" del tipo dado
 // (Practica y Tarea comparten integrantes, ver asignacion.service.js) dentro de la materia
-// indicada. Al editar, `excluirEquipo` ignora tanto el propio equipo como su "espejo"
-// (Practica/Tarea con el mismo nombre comparten integrantes, ver asignacion.service.js) —
-// de lo contrario guardar un equipo sin cambios chocaría con su propio equipo espejo.
-async function idsAlumnosConEquipoDeTipo(idMateria, tipo, excluirEquipo) {
+// indicada. Al editar, `idsExcluidos` trae el propio equipo y su espejo (por id, nunca por
+// nombre) — de lo contrario guardar un equipo sin cambios chocaría con su propio espejo.
+async function idsAlumnosConEquipoDeTipo(idMateria, tipo, idsExcluidos = []) {
   const tipos = tiposEspejo(tipo)
   const params = [idMateria, tipos]
   let sql = `SELECT DISTINCT ea.id_alumno
              FROM equipo_alumno ea
              JOIN equipo eq ON eq.id_equipo = ea.id_equipo
              WHERE eq.id_materia = ? AND eq.tipo IN (?) AND eq.activo = TRUE`
-  if (excluirEquipo) {
-    sql += ' AND eq.id_equipo != ? AND eq.nombre != ?'
-    params.push(excluirEquipo.id_equipo, excluirEquipo.nombre)
+  if (idsExcluidos.length > 0) {
+    sql += ' AND eq.id_equipo NOT IN (?)'
+    params.push(idsExcluidos)
   }
   const [rows] = await pool.query(sql, params)
   return new Set(rows.map((r) => r.id_alumno))
+}
+
+// Equipo (con el id_profesor dueño de su materia) y los ids de las filas sobre las que debe
+// operar una escritura: el propio equipo y, si lo tiene, su espejo. El espejo solo se toma
+// en cuenta si pertenece a la misma materia (defensa ante un enlace corrupto).
+async function obtenerEquipoParaEscritura(id) {
+  const [rows] = await pool.query(
+    `SELECT eq.id_equipo, eq.id_materia, eq.nombre, eq.tipo, eq.id_equipo_espejo, eq.activo, m.id_profesor
+     FROM equipo eq JOIN materia m ON m.id_materia = eq.id_materia
+     WHERE eq.id_equipo = ?`,
+    [id]
+  )
+  const equipo = rows[0]
+  if (!equipo) return null
+
+  const ids = [equipo.id_equipo]
+  if (equipo.id_equipo_espejo) {
+    const [espejoRows] = await pool.query('SELECT id_equipo FROM equipo WHERE id_equipo = ? AND id_materia = ?', [
+      equipo.id_equipo_espejo,
+      equipo.id_materia,
+    ])
+    if (espejoRows.length > 0) ids.push(espejoRows[0].id_equipo)
+  }
+  return { equipo, ids }
+}
+
+async function nombresDeAlumnos(idsAlumno) {
+  if (idsAlumno.length === 0) return []
+  const [rows] = await pool.query(
+    `SELECT a.id_alumno, u.nombre, u.apellido_paterno, u.apellido_materno
+     FROM alumno a JOIN usuario u ON u.id_usuario = a.id_usuario
+     WHERE a.id_alumno IN (?)
+     ORDER BY u.apellido_paterno, u.apellido_materno, u.nombre`,
+    [idsAlumno]
+  )
+  return rows.map((r) => ({
+    id_alumno: r.id_alumno,
+    nombre: [r.nombre, r.apellido_paterno, r.apellido_materno].filter(Boolean).join(' '),
+  }))
 }
 
 async function listar(req, res) {
@@ -71,7 +117,7 @@ async function listar(req, res) {
     const idAlumno = await obtenerIdAlumnoPropio(req.user.id_usuario)
 
     const [equipos] = await pool.query(
-      `SELECT eq.id_equipo, eq.id_materia, eq.nombre, eq.tipo, eq.activo, eq.fecha_creacion,
+      `SELECT eq.id_equipo, eq.id_materia, eq.nombre, eq.tipo, eq.id_equipo_espejo, eq.activo, eq.fecha_creacion,
               m.clave AS materia_clave, m.nombre AS materia_nombre, m.grupo AS materia_grupo
        FROM equipo_alumno ea
        JOIN equipo eq ON eq.id_equipo = ea.id_equipo
@@ -107,7 +153,7 @@ async function listar(req, res) {
   }
 
   const [equipos] = await pool.query(
-    `SELECT id_equipo, id_materia, nombre, tipo, activo, fecha_creacion
+    `SELECT id_equipo, id_materia, nombre, tipo, id_equipo_espejo, activo, fecha_creacion
      FROM equipo WHERE id_materia = ? AND activo = TRUE ORDER BY tipo, nombre`,
     [materiaRow.id_materia]
   )
@@ -128,7 +174,7 @@ async function obtener(req, res) {
   const { id } = req.params
 
   const [rows] = await pool.query(
-    `SELECT eq.id_equipo, eq.id_materia, eq.nombre, eq.tipo, eq.activo, eq.fecha_creacion,
+    `SELECT eq.id_equipo, eq.id_materia, eq.nombre, eq.tipo, eq.id_equipo_espejo, eq.activo, eq.fecha_creacion,
             m.id_profesor, m.clave AS materia_clave, m.nombre AS materia_nombre, m.grupo AS materia_grupo
      FROM equipo eq JOIN materia m ON m.id_materia = eq.id_materia
      WHERE eq.id_equipo = ?`,
@@ -160,6 +206,9 @@ async function obtener(req, res) {
   res.status(200).json({ equipo: { ...equipo, integrantes: integrantesPorEquipo.get(Number(id)) ?? [] } })
 }
 
+// POST /api/equipos — alta manual. Un equipo de Práctica o de Tarea crea las DOS filas
+// (la del tipo pedido y su espejo), con los mismos integrantes y enlazadas entre sí; sin la
+// fila espejo el equipo se quedaría sin actividades de Tarea/En clase o de Práctica.
 async function crear(req, res) {
   const { id_materia, nombre, tipo, integrantes } = req.body
 
@@ -186,6 +235,8 @@ async function crear(req, res) {
     return res.status(409).json({ error: `El alumno con id ${conflicto} ya tiene un equipo de tipo ${tipo} en esta materia` })
   }
 
+  const tipoEspejo = tipoEspejoDe(tipo)
+
   const conexion = await pool.getConnection()
   try {
     await conexion.beginTransaction()
@@ -195,11 +246,28 @@ async function crear(req, res) {
       tipo,
     ])
     const idEquipo = result.insertId
-    for (const idAlumno of integrantes) {
-      await conexion.query('INSERT INTO equipo_alumno (id_equipo, id_alumno) VALUES (?, ?)', [idEquipo, idAlumno])
+
+    let idEspejo = null
+    if (tipoEspejo) {
+      const [resultEspejo] = await conexion.query(
+        'INSERT INTO equipo (id_materia, nombre, tipo, id_equipo_espejo) VALUES (?, ?, ?, ?)',
+        [id_materia, nombre, tipoEspejo, idEquipo]
+      )
+      idEspejo = resultEspejo.insertId
+      await conexion.query('UPDATE equipo SET id_equipo_espejo = ? WHERE id_equipo = ?', [idEspejo, idEquipo])
     }
+
+    for (const idFila of [idEquipo, idEspejo].filter(Boolean)) {
+      for (const idAlumno of integrantes) {
+        await conexion.query('INSERT INTO equipo_alumno (id_equipo, id_alumno) VALUES (?, ?)', [idFila, idAlumno])
+      }
+    }
+
     await conexion.commit()
-    res.status(201).json({ equipo: { id_equipo: idEquipo, id_materia, nombre, tipo, integrantes } })
+    res.status(201).json({
+      equipo: { id_equipo: idEquipo, id_materia, nombre, tipo, id_equipo_espejo: idEspejo, integrantes },
+      equipo_espejo: idEspejo ? { id_equipo: idEspejo, tipo: tipoEspejo } : null,
+    })
   } catch (err) {
     await conexion.rollback()
     throw err
@@ -208,21 +276,17 @@ async function crear(req, res) {
   }
 }
 
+// PUT /api/equipos/:id — nombre e integrantes. Si el equipo tiene espejo, ambas filas quedan
+// con el mismo nombre y los mismos integrantes en una sola transacción.
 async function actualizar(req, res) {
   const { id } = req.params
   const { nombre, integrantes } = req.body
 
-  const [equipoRows] = await pool.query(
-    `SELECT eq.id_equipo, eq.id_materia, eq.nombre, eq.tipo, m.id_profesor
-     FROM equipo eq JOIN materia m ON m.id_materia = eq.id_materia
-     WHERE eq.id_equipo = ?`,
-    [id]
-  )
-  const equipo = equipoRows[0]
-
-  if (!equipo) {
+  const encontrado = await obtenerEquipoParaEscritura(id)
+  if (!encontrado) {
     return res.status(404).json({ error: 'Equipo no encontrado' })
   }
+  const { equipo, ids } = encontrado
 
   const idProfesor = await obtenerIdProfesorPropio(req.user.id_usuario)
   if (equipo.id_profesor !== idProfesor) {
@@ -237,10 +301,7 @@ async function actualizar(req, res) {
     return res.status(400).json({ error: 'Todos los integrantes deben estar inscritos en la materia' })
   }
 
-  const idsConEquipo = await idsAlumnosConEquipoDeTipo(equipo.id_materia, equipo.tipo, {
-    id_equipo: equipo.id_equipo,
-    nombre: equipo.nombre,
-  })
+  const idsConEquipo = await idsAlumnosConEquipoDeTipo(equipo.id_materia, equipo.tipo, ids)
   const conflicto = integrantes.find((idAlumno) => idsConEquipo.has(idAlumno))
   if (conflicto) {
     return res
@@ -251,13 +312,15 @@ async function actualizar(req, res) {
   const conexion = await pool.getConnection()
   try {
     await conexion.beginTransaction()
-    await conexion.query('UPDATE equipo SET nombre = ? WHERE id_equipo = ?', [nombre, id])
-    await conexion.query('DELETE FROM equipo_alumno WHERE id_equipo = ?', [id])
-    for (const idAlumno of integrantes) {
-      await conexion.query('INSERT INTO equipo_alumno (id_equipo, id_alumno) VALUES (?, ?)', [id, idAlumno])
+    await conexion.query('UPDATE equipo SET nombre = ? WHERE id_equipo IN (?)', [nombre, ids])
+    await conexion.query('DELETE FROM equipo_alumno WHERE id_equipo IN (?)', [ids])
+    for (const idFila of ids) {
+      for (const idAlumno of integrantes) {
+        await conexion.query('INSERT INTO equipo_alumno (id_equipo, id_alumno) VALUES (?, ?)', [idFila, idAlumno])
+      }
     }
     await conexion.commit()
-    res.status(200).json({ message: 'Equipo actualizado' })
+    res.status(200).json({ message: 'Equipo actualizado', equipos_actualizados: ids })
   } catch (err) {
     await conexion.rollback()
     throw err
@@ -266,32 +329,42 @@ async function actualizar(req, res) {
   }
 }
 
+// PATCH /api/equipos/:id/desactivar — borrado lógico. Si el equipo tiene espejo se
+// desactivan ambas filas en la misma transacción.
 async function desactivar(req, res) {
   const { id } = req.params
 
-  const [equipoRows] = await pool.query(
-    'SELECT eq.id_equipo, m.id_profesor FROM equipo eq JOIN materia m ON m.id_materia = eq.id_materia WHERE eq.id_equipo = ?',
-    [id]
-  )
-  const equipo = equipoRows[0]
-
-  if (!equipo) {
+  const encontrado = await obtenerEquipoParaEscritura(id)
+  if (!encontrado) {
     return res.status(404).json({ error: 'Equipo no encontrado' })
   }
+  const { equipo, ids } = encontrado
 
   const idProfesor = await obtenerIdProfesorPropio(req.user.id_usuario)
   if (equipo.id_profesor !== idProfesor) {
     return res.status(403).json({ error: 'No tienes permiso para desactivar este equipo' })
   }
 
-  await pool.query('UPDATE equipo SET activo = FALSE WHERE id_equipo = ?', [id])
-  res.status(200).json({ message: 'Equipo desactivado' })
+  const conexion = await pool.getConnection()
+  try {
+    await conexion.beginTransaction()
+    await conexion.query('UPDATE equipo SET activo = FALSE WHERE id_equipo IN (?)', [ids])
+    await conexion.commit()
+  } catch (err) {
+    await conexion.rollback()
+    throw err
+  } finally {
+    conexion.release()
+  }
+
+  res.status(200).json({ message: 'Equipo desactivado', equipos_desactivados: ids })
 }
 
 // Asignación aleatoria masiva: forma equipos de 3 con los alumnos inscritos en la materia
-// que todavía no tienen equipo del tipo indicado (Practica/Tarea comparten integrantes,
-// ver asignacion.service.js). Si sobran 1 o 2 alumnos tras agrupar de 3 en 3, quedan sin
-// asignar y se reportan en la respuesta — el profesor los asigna manualmente después.
+// que todavía no tienen equipo del tipo indicado (Practica/Tarea comparten integrantes y se
+// crean como par enlazado por id_equipo_espejo, ver asignacion.service.js). Si sobran 1 o 2
+// alumnos tras agrupar de 3 en 3, quedan sin asignar y se reportan en `sin_asignar` — el
+// profesor los agrega a mano a un equipo existente (el alta/edición manual admite 4).
 async function generar(req, res) {
   const { id_materia, tipo } = req.body
 
@@ -319,7 +392,11 @@ async function generar(req, res) {
     } else {
       mensaje = `Solo hay ${disponibles.length} alumno(s) sin equipo de tipo ${tipo} en esta materia; se necesitan al menos 3 para formar un equipo`
     }
-    return res.status(422).json({ error: mensaje, alumnos_disponibles: disponibles.length })
+    return res.status(422).json({
+      error: mensaje,
+      alumnos_disponibles: disponibles.length,
+      sin_asignar: await nombresDeAlumnos(disponibles),
+    })
   }
 
   const { grupos, sobrantes } = asignarEquiposAleatorio(disponibles)
@@ -351,6 +428,8 @@ async function generar(req, res) {
     for (const grupo of grupos) {
       const nombreEquipo = siguienteNombre(contador)
       contador++
+
+      const filas = []
       for (const t of tipos) {
         const [result] = await conexion.query('INSERT INTO equipo (id_materia, nombre, tipo) VALUES (?, ?, ?)', [
           id_materia,
@@ -361,8 +440,17 @@ async function generar(req, res) {
         for (const idAlumno of grupo) {
           await conexion.query('INSERT INTO equipo_alumno (id_equipo, id_alumno) VALUES (?, ?)', [idEquipo, idAlumno])
         }
-        equiposCreados.push({ id_equipo: idEquipo, nombre: nombreEquipo, tipo: t, integrantes: grupo })
+        filas.push({ id_equipo: idEquipo, nombre: nombreEquipo, tipo: t, id_equipo_espejo: null, integrantes: grupo })
       }
+
+      // Práctica y Tarea: las dos filas recién creadas se enlazan entre sí.
+      if (filas.length === 2) {
+        await conexion.query('UPDATE equipo SET id_equipo_espejo = ? WHERE id_equipo = ?', [filas[1].id_equipo, filas[0].id_equipo])
+        await conexion.query('UPDATE equipo SET id_equipo_espejo = ? WHERE id_equipo = ?', [filas[0].id_equipo, filas[1].id_equipo])
+        filas[0].id_equipo_espejo = filas[1].id_equipo
+        filas[1].id_equipo_espejo = filas[0].id_equipo
+      }
+      equiposCreados.push(...filas)
     }
     await conexion.commit()
   } catch (err) {
@@ -377,6 +465,7 @@ async function generar(req, res) {
     equipos_creados: grupos.length,
     alumnos_sin_asignar: sobrantes.length,
     ids_alumnos_sin_asignar: sobrantes,
+    sin_asignar: await nombresDeAlumnos(sobrantes),
   })
 }
 

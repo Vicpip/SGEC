@@ -7,7 +7,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { Download, Loader2, Megaphone } from 'lucide-react'
-import PageWrapper from '../../components/layout/PageWrapper'
+import PageWrapper, { SemestreActivo } from '../../components/layout/PageWrapper'
 import Badge from '../../components/ui/Badge'
 import EmptyState from '../../components/ui/EmptyState'
 import ArchivoLink from '../../components/ui/ArchivoLink'
@@ -77,7 +77,7 @@ export default function TablonAlumno() {
       title="Tablón de Avisos"
       actions={
         <>
-          <div className="topbar-semester">2026/1</div>
+          <SemestreActivo />
           {sinLeer > 0 && (
             <Badge variant="unread" style={{ fontSize: 12, padding: '5px 12px' }}>
               {sinLeer} sin leer

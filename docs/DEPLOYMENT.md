@@ -124,12 +124,14 @@ levantar el código nuevo:
 |---|---|---|---|
 | `002_debe_cambiar_contrasena.sql` | 13 | `usuario.debe_cambiar_contrasena` | `node server/db/migrations/aplicar_002.js` (idempotente: revisa `information_schema` y no hace nada si la columna ya existe) |
 | `003_tipo_evaluacion_y_baja_alumno.sql` | 14 | `actividad.tipo_evaluacion` y `materia_alumno.activo` | `node server/db/migrations/aplicar_003.js` (idempotente columna por columna) |
+| `004_equipo_espejo.sql` | 15 | `equipo.id_equipo_espejo` (columna, índice y llave foránea) y el emparejamiento de los equipos Práctica/Tarea existentes | `node server/db/migrations/aplicar_004.js` (idempotente paso por paso; al terminar lista los equipos que quedaron sin espejo y los pares con integrantes distintos, para revisarlos a mano) |
 
 Con Docker, desde la carpeta del repo en el servidor:
 
 ```bash
 docker compose exec server node db/migrations/aplicar_002.js
 docker compose exec server node db/migrations/aplicar_003.js
+docker compose exec server node db/migrations/aplicar_004.js
 ```
 
 Si se despliega el código de la Sesión 13 sin esta migración, el alta/importación de alumnos, el
@@ -137,7 +139,10 @@ cambio de contraseña y el restablecimiento por enlace fallan con error 500 (col
 Sin la 003, el código de la Sesión 14 responde 500 en casi todo lo que usa el alumno y el profesor
 (listados de alumnos, actividades, avisos, entregas, equipos y dashboard), porque todas esas
 consultas filtran por `materia_alumno.activo` o leen `actividad.tipo_evaluacion`. Las migraciones
-se aplican en orden (002, luego 003).
+se aplican en orden (002, 003 y 004). Sin la 004, el código de la Sesión 15 responde 500 en equipos,
+reportes y el panel del alumno (leen `equipo.id_equipo_espejo`). La 004 no borra nada: agrega la columna y
+enlaza entre sí las filas de Práctica y Tarea que tengan la misma materia y el mismo nombre y estén activas;
+un nombre repetido dentro de la misma materia y tipo se deja sin enlazar y el script lo reporta.
 
 ### Correo saliente (SMTP)
 

@@ -4,8 +4,8 @@
 // Descripción: Lista de alumnos inscritos en la materia/grupo, con alta manual, edición de
 // datos (el correo institucional no se edita) y baja de la materia (lógica, con confirmación).
 
-import { useEffect, useMemo, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import * as XLSX from 'xlsx'
 import { Search, Upload, Users, Loader2, FileDown, UserPlus, X, KeyRound } from 'lucide-react'
 import ConfirmDialog from '../../components/ui/ConfirmDialog'
@@ -14,8 +14,9 @@ import Badge from '../../components/ui/Badge'
 import ActionButtons from '../../components/ui/ActionButtons'
 import EmptyState from '../../components/ui/EmptyState'
 import CredencialesTemporales from '../../components/ui/CredencialesTemporales'
+import SelectorSemestre from '../../components/ui/SelectorSemestre'
+import { useSelectorMateria } from '../../hooks/useSelectorMateria'
 import * as alumnosService from '../../services/alumnos.service'
-import * as materiasService from '../../services/materias.service'
 
 const PLANTILLA_ENCABEZADOS = ['boleta', 'nombre', 'apellido_paterno', 'apellido_materno', 'grupo', 'correo_institucional', 'carrera']
 const PLANTILLA_EJEMPLO = ['2020630001', 'Juan', 'Pérez', 'López', '4CM1', 'jperez@alumno.ipn.mx', 'Ingeniería en Sistemas Computacionales']
@@ -302,10 +303,10 @@ function RestablecerAccesoModal({ alumno, onClose, onRestablecido }) {
 
 export default function ListaAlumnos() {
   const navigate = useNavigate()
-  const [searchParams, setSearchParams] = useSearchParams()
-  const claveMateria = searchParams.get('materia') ?? ''
+  const { claveMateria, cambiarMateria, semestres, semestre, cambiarSemestre, materias, materiasListas } = useSelectorMateria()
+  // Numera las cargas para descartar la respuesta de una materia que ya no es la elegida.
+  const solicitudRef = useRef(0)
 
-  const [materias, setMaterias] = useState([])
   const [materia, setMateria] = useState(null)
   const [alumnos, setAlumnos] = useState([])
   const [loading, setLoading] = useState(true)
@@ -318,41 +319,46 @@ export default function ListaAlumnos() {
   // { titulo, lista } mientras se muestran contraseñas temporales recién generadas.
   const [credenciales, setCredenciales] = useState(null)
 
-  useEffect(() => {
-    materiasService
-      .listarMaterias()
-      .then((data) => {
-        setMaterias(data)
-        if (!claveMateria && data[0]) {
-          setSearchParams({ materia: data[0].clave }, { replace: true })
-        }
-      })
-      .catch(() => {})
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
   function cargarAlumnos() {
-    if (!claveMateria) return
+    const solicitud = ++solicitudRef.current
+    // Mientras se carga la lista de materias del semestre elegido no se pide nada: la
+    // materia de la URL puede pertenecer todavía al semestre anterior.
+    if (!materiasListas) {
+      setLoading(true)
+      return
+    }
+    if (!claveMateria) {
+      // Sin materia elegida (el semestre filtrado no tiene materias): no hay nada que listar.
+      setAlumnos([])
+      setMateria(null)
+      setError('')
+      setLoading(false)
+      return
+    }
     setLoading(true)
     return alumnosService
       .listarAlumnos(claveMateria)
       .then((data) => {
+        if (solicitud !== solicitudRef.current) return
         setAlumnos(data.alumnos)
         setMateria(data.materia)
         setError('')
       })
       .catch((err) => {
+        if (solicitud !== solicitudRef.current) return
         setError(err.response?.data?.error || 'No se pudieron cargar los alumnos')
         setAlumnos([])
         setMateria(null)
       })
-      .finally(() => setLoading(false))
+      .finally(() => {
+        if (solicitud === solicitudRef.current) setLoading(false)
+      })
   }
 
   useEffect(() => {
     cargarAlumnos()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [claveMateria])
+  }, [claveMateria, materiasListas])
 
   const alumnosFiltrados = useMemo(() => {
     const termino = busqueda.trim().toLowerCase()
@@ -364,7 +370,7 @@ export default function ListaAlumnos() {
   }, [alumnos, busqueda])
 
   function handleCambioMateria(e) {
-    setSearchParams({ materia: e.target.value })
+    cambiarMateria(e.target.value)
   }
 
   function handleAlumnoCreado(nuevas) {
@@ -434,6 +440,7 @@ export default function ListaAlumnos() {
             onChange={(e) => setBusqueda(e.target.value)}
           />
         </div>
+        <SelectorSemestre semestres={semestres} value={semestre} onChange={cambiarSemestre} />
         {materias.length > 0 && (
           <select className="select-input" value={claveMateria} onChange={handleCambioMateria}>
             {materias.map((m) => (
@@ -461,8 +468,8 @@ export default function ListaAlumnos() {
           ) : materias.length === 0 ? (
             <EmptyState
               icon={Users}
-              title="Sin materias registradas"
-              description="Crea una materia para poder inscribir alumnos."
+              title={semestre ? `Sin materias en el semestre ${semestre}` : 'Sin materias registradas'}
+              description={semestre ? 'Elige otro semestre o crea una materia en este.' : 'Crea una materia para poder inscribir alumnos.'}
             />
           ) : alumnosFiltrados.length === 0 ? (
             <EmptyState

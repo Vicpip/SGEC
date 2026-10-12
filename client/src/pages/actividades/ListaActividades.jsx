@@ -10,15 +10,16 @@
 // (Pantalla 15 — Publicar Actividad) y de /actividades/:id (Pantalla 10 — Detalle de
 // Actividad), que hasta ahora solo era alcanzable por URL directa.
 
-import { useEffect, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Plus, Loader2, ClipboardList, Users, User } from 'lucide-react'
 import PageWrapper from '../../components/layout/PageWrapper'
 import Badge from '../../components/ui/Badge'
 import EmptyState from '../../components/ui/EmptyState'
 import ActionButtons from '../../components/ui/ActionButtons'
 import ConfirmDialog from '../../components/ui/ConfirmDialog'
-import * as materiasService from '../../services/materias.service'
+import SelectorSemestre from '../../components/ui/SelectorSemestre'
+import { useSelectorMateria } from '../../hooks/useSelectorMateria'
 import * as actividadesService from '../../services/actividades.service'
 
 const TIPO_VARIANT = { 'En clase': 'gray', Practica: 'blue', Tarea: 'navy', Proyecto: 'orange' }
@@ -30,51 +31,56 @@ function formatFecha(fecha) {
 
 export default function ListaActividades() {
   const navigate = useNavigate()
-  const [searchParams, setSearchParams] = useSearchParams()
-  const claveMateria = searchParams.get('materia') ?? ''
+  const { claveMateria, cambiarMateria, semestres, semestre, cambiarSemestre, materias, materiasListas } = useSelectorMateria()
+  // Numera las cargas para descartar la respuesta de una materia que ya no es la elegida.
+  const solicitudRef = useRef(0)
 
-  const [materias, setMaterias] = useState([])
   const [materia, setMateria] = useState(null)
   const [actividades, setActividades] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [actividadADesactivar, setActividadADesactivar] = useState(null)
 
-  useEffect(() => {
-    materiasService
-      .listarMaterias()
-      .then((data) => {
-        setMaterias(data)
-        if (!claveMateria && data[0]) {
-          setSearchParams({ materia: data[0].clave }, { replace: true })
-        }
-      })
-      .catch(() => {})
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
   function cargarActividades() {
-    if (!claveMateria) return
+    const solicitud = ++solicitudRef.current
+    // Mientras se carga la lista de materias del semestre elegido no se pide nada: la
+    // materia de la URL puede pertenecer todavía al semestre anterior.
+    if (!materiasListas) {
+      setLoading(true)
+      return
+    }
+    if (!claveMateria) {
+      // Sin materia elegida (el semestre filtrado no tiene materias): no hay nada que listar.
+      setActividades([])
+      setMateria(null)
+      setError('')
+      setLoading(false)
+      return
+    }
     setLoading(true)
     actividadesService
       .listarActividades(claveMateria)
       .then((data) => {
+        if (solicitud !== solicitudRef.current) return
         setActividades(data.actividades)
         setMateria(data.materia)
         setError('')
       })
       .catch((err) => {
+        if (solicitud !== solicitudRef.current) return
         setError(err.response?.data?.error || 'No se pudieron cargar las actividades')
         setActividades([])
         setMateria(null)
       })
-      .finally(() => setLoading(false))
+      .finally(() => {
+        if (solicitud === solicitudRef.current) setLoading(false)
+      })
   }
 
   useEffect(() => {
     cargarActividades()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [claveMateria])
+  }, [claveMateria, materiasListas])
 
   async function handleConfirmarDesactivar() {
     await actividadesService.desactivarActividad(actividadADesactivar.id_actividad)
@@ -104,21 +110,18 @@ export default function ListaActividades() {
         </button>
       }
     >
-      {materias.length > 0 && (
-        <div className="toolbar">
-          <select
-            className="select-input"
-            value={claveMateria}
-            onChange={(e) => setSearchParams({ materia: e.target.value })}
-          >
+      <div className="toolbar">
+        <SelectorSemestre semestres={semestres} value={semestre} onChange={cambiarSemestre} />
+        {materias.length > 0 && (
+          <select className="select-input" value={claveMateria} onChange={(e) => cambiarMateria(e.target.value)}>
             {materias.map((m) => (
               <option key={m.id_materia} value={m.clave}>
                 {m.clave} — {m.nombre} · {m.grupo}
               </option>
             ))}
           </select>
-        </div>
-      )}
+        )}
+      </div>
 
       {error && (
         <div className="login-error" style={{ marginBottom: 16 }}>
@@ -132,7 +135,13 @@ export default function ListaActividades() {
         </div>
       ) : (
         <div className="card">
-          {actividades.length === 0 ? (
+          {materiasListas && materias.length === 0 ? (
+            <EmptyState
+              icon={ClipboardList}
+              title={semestre ? `Sin materias en el semestre ${semestre}` : 'Sin materias registradas'}
+              description={semestre ? 'Elige otro semestre o crea una materia en este.' : 'Crea una materia para poder publicar actividades.'}
+            />
+          ) : actividades.length === 0 ? (
             <EmptyState
               icon={ClipboardList}
               title="Sin actividades publicadas"

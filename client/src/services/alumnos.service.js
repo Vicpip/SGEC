@@ -30,6 +30,12 @@ export function darDeBajaAlumno(idAlumno, materiaClave) {
   return api.patch(`/alumnos/${idAlumno}/baja`, null, { params: { materia: materiaClave } }).then(({ data }) => data)
 }
 
+// Solo Administrador: busca alumnos por correo institucional o boleta (mínimo 3 caracteres,
+// máximo 10 resultados) para la pantalla "Accesos de alumnos".
+export function buscarAlumnos(q) {
+  return api.get('/alumnos/buscar', { params: { q } }).then(({ data }) => data.alumnos)
+}
+
 // Regenera la contraseña temporal del alumno. Devuelve la lista `credenciales` (1 elemento).
 export function restablecerAcceso(idAlumno) {
   return api.post(`/alumnos/${idAlumno}/restablecer-acceso`).then(({ data }) => data.credenciales)

@@ -113,3 +113,19 @@ VALUES
   ((SELECT id_equipo FROM equipo WHERE id_materia = (SELECT id_materia FROM materia WHERE clave = 'PWEB2026') AND nombre = 'Proyecto 2' AND tipo = 'Proyecto'), (SELECT id_alumno FROM alumno WHERE boleta = '2023630049')),
   ((SELECT id_equipo FROM equipo WHERE id_materia = (SELECT id_materia FROM materia WHERE clave = 'PWEB2026') AND nombre = 'Proyecto 2' AND tipo = 'Proyecto'), (SELECT id_alumno FROM alumno WHERE boleta = '2023630055')),
   ((SELECT id_equipo FROM equipo WHERE id_materia = (SELECT id_materia FROM materia WHERE clave = 'PWEB2026') AND nombre = 'Proyecto 2' AND tipo = 'Proyecto'), (SELECT id_alumno FROM alumno WHERE boleta = '2023630057'));
+
+-- ── Espejo Practica/Tarea ────────────────────────────────────────────────
+-- Enlaza cada equipo de Práctica con su gemelo de Tarea (misma materia y mismo
+-- nombre) mediante id_equipo_espejo. Es la misma sentencia del backfill de la
+-- migración 004.
+UPDATE equipo e
+JOIN (
+  SELECT id_materia, nombre,
+         MIN(CASE WHEN tipo = 'Practica' THEN id_equipo END) AS id_practica,
+         MIN(CASE WHEN tipo = 'Tarea' THEN id_equipo END) AS id_tarea
+  FROM equipo
+  WHERE activo = TRUE AND tipo IN ('Practica', 'Tarea') AND id_equipo_espejo IS NULL
+  GROUP BY id_materia, nombre
+  HAVING SUM(tipo = 'Practica') = 1 AND SUM(tipo = 'Tarea') = 1
+) par ON e.id_equipo IN (par.id_practica, par.id_tarea)
+SET e.id_equipo_espejo = IF(e.id_equipo = par.id_practica, par.id_tarea, par.id_practica);

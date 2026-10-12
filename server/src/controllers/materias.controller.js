@@ -103,12 +103,16 @@ async function crear(req, res) {
       .json({ error: `El semestre ${semestreRows[0].clave} está inactivo: no se pueden crear materias en él` })
   }
 
-  const [duplicado] = await pool.query('SELECT id_materia FROM materia WHERE clave = ? AND id_semestre = ?', [
-    clave,
-    id_semestre,
-  ])
+  // Misma regla que el índice único uk_materia_clave_grupo_semestre: lo que no se puede
+  // repetir es la combinación clave + grupo + semestre (la misma clave con otro grupo sí).
+  const [duplicado] = await pool.query(
+    'SELECT id_materia FROM materia WHERE clave = ? AND grupo = ? AND id_semestre = ?',
+    [clave, grupo, id_semestre]
+  )
   if (duplicado.length > 0) {
-    return res.status(409).json({ error: `Ya existe una materia con la clave "${clave}" en este semestre` })
+    return res
+      .status(409)
+      .json({ error: `Ya existe una materia con la clave "${clave}" y grupo "${grupo}" en este semestre` })
   }
 
   try {
@@ -181,11 +185,13 @@ async function actualizar(req, res) {
   }
 
   const [duplicado] = await pool.query(
-    'SELECT id_materia FROM materia WHERE clave = ? AND id_semestre = ? AND id_materia != ?',
-    [clave, id_semestre, id]
+    'SELECT id_materia FROM materia WHERE clave = ? AND grupo = ? AND id_semestre = ? AND id_materia != ?',
+    [clave, grupo, id_semestre, id]
   )
   if (duplicado.length > 0) {
-    return res.status(409).json({ error: `Ya existe una materia con la clave "${clave}" en este semestre` })
+    return res
+      .status(409)
+      .json({ error: `Ya existe una materia con la clave "${clave}" y grupo "${grupo}" en este semestre` })
   }
 
   try {

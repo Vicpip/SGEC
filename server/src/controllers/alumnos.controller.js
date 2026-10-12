@@ -544,6 +544,51 @@ async function restablecerAcceso(req, res) {
   })
 }
 
+const BUSQUEDA_MIN_CARACTERES = 3
+const BUSQUEDA_MAX_RESULTADOS = 10
+
+// GET /api/alumnos/buscar?q=
+// Solo Administrador (lo exige la ruta). Busca alumnos por correo institucional o boleta
+// para la pantalla "Accesos de alumnos", donde el Administrador restablece el acceso de
+// quien ya activó su cuenta y olvidó su contraseña. Devuelve como máximo 10 resultados y
+// únicamente id, nombre, correo, boleta, activo y acceso_pendiente — nada más de la cuenta.
+// Exige al menos 3 caracteres para que no sirva como listado completo de alumnos.
+async function buscar(req, res) {
+  const q = typeof req.query.q === 'string' ? req.query.q.trim() : ''
+
+  if (q.length < BUSQUEDA_MIN_CARACTERES) {
+    return res.status(400).json({ error: `Escribe al menos ${BUSQUEDA_MIN_CARACTERES} caracteres del correo o la boleta` })
+  }
+  if (q.length > 150) {
+    return res.status(400).json({ error: 'El texto de búsqueda es demasiado largo' })
+  }
+
+  // % y _ son comodines de LIKE: se escapan para buscarlos como texto literal.
+  const patron = `%${q.replace(/[\\%_]/g, '\\$&')}%`
+
+  const [rows] = await pool.query(
+    `SELECT a.id_alumno, a.boleta, u.nombre, u.apellido_paterno, u.apellido_materno,
+            u.correo_institucional, u.activo, u.debe_cambiar_contrasena
+     FROM alumno a
+     JOIN usuario u ON u.id_usuario = a.id_usuario
+     WHERE u.rol = 'Alumno' AND (u.correo_institucional LIKE ? OR a.boleta LIKE ?)
+     ORDER BY u.apellido_paterno, u.apellido_materno, u.nombre
+     LIMIT ?`,
+    [patron, patron, BUSQUEDA_MAX_RESULTADOS]
+  )
+
+  res.status(200).json({
+    alumnos: rows.map((r) => ({
+      id_alumno: r.id_alumno,
+      nombre: nombreParaCredencial(r),
+      correo_institucional: r.correo_institucional,
+      boleta: r.boleta,
+      activo: Boolean(r.activo),
+      acceso_pendiente: Boolean(r.debe_cambiar_contrasena),
+    })),
+  })
+}
+
 // PUT /api/alumnos/:id
 // Edita nombre, apellidos, boleta, grupo y carrera. El correo institucional NO se edita (es
 // la identidad de la cuenta; el validador rechaza el campo). Solo el profesor que tiene al
@@ -660,6 +705,7 @@ async function darDeBaja(req, res) {
 
 module.exports = {
   listar,
+  buscar,
   obtener,
   crear,
   actualizar,

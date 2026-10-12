@@ -1,14 +1,17 @@
 // Pantalla 05 — Crear Equipo
 // Rol: Profesor
 // URL: /equipos/nuevo
-// Descripción: Formulario para asignar equipos de 3 integrantes, de forma manual o aleatoria sin repetición.
+// Descripción: Formulario para crear un equipo de 3 o 4 integrantes, de forma manual o aleatoria
+// sin repetición. Un equipo de Práctica o de Tarea se crea para ambos tipos a la vez (comparten
+// integrantes); la asignación aleatoria siempre propone 3.
 
-import { useEffect, useMemo, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Shuffle, Check, Loader2 } from 'lucide-react'
 import PageWrapper from '../../components/layout/PageWrapper'
 import Avatar from '../../components/ui/Avatar'
-import * as materiasService from '../../services/materias.service'
+import SelectorSemestre from '../../components/ui/SelectorSemestre'
+import { useSelectorMateria } from '../../hooks/useSelectorMateria'
 import * as alumnosService from '../../services/alumnos.service'
 import * as equiposService from '../../services/equipos.service'
 
@@ -17,6 +20,9 @@ const TIPO_LABEL = { Practica: 'Práctica', Tarea: 'Tarea', Proyecto: 'Proyecto'
 // Practica y Tarea comparten integrantes (ver CLAUDE.md): un alumno con equipo de
 // cualquiera de esos dos tipos queda excluido del pool de elegibles del otro.
 const TIPOS_ESPEJO = ['Practica', 'Tarea']
+// Alta manual: 3 o 4 integrantes (el cuarto permite absorber a un alumno sobrante).
+const INTEGRANTES_MIN = 3
+const INTEGRANTES_MAX = 4
 
 function tiposExcluidos(tipo) {
   return TIPOS_ESPEJO.includes(tipo) ? TIPOS_ESPEJO : [tipo]
@@ -28,10 +34,10 @@ function iniciales(alumno) {
 
 export default function CrearEquipo() {
   const navigate = useNavigate()
-  const [searchParams, setSearchParams] = useSearchParams()
-  const claveMateria = searchParams.get('materia') ?? ''
+  const { claveMateria, cambiarMateria, semestres, semestre, cambiarSemestre, materias, materiasListas } = useSelectorMateria()
+  // Numera las cargas para descartar la respuesta de una materia que ya no es la elegida.
+  const solicitudRef = useRef(0)
 
-  const [materias, setMaterias] = useState([])
   const [nombre, setNombre] = useState('')
   const [tipo, setTipo] = useState('Practica')
   const [alumnos, setAlumnos] = useState([])
@@ -42,35 +48,39 @@ export default function CrearEquipo() {
   const [error, setError] = useState('')
 
   useEffect(() => {
-    materiasService
-      .listarMaterias()
-      .then((data) => {
-        setMaterias(data)
-        if (!claveMateria && data[0]) {
-          setSearchParams({ materia: data[0].clave }, { replace: true })
-        }
-      })
-      .catch(() => {})
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  useEffect(() => {
-    if (!claveMateria) return
+    const solicitud = ++solicitudRef.current
+    // Mientras se carga la lista de materias del semestre elegido no se pide nada: la
+    // materia de la URL puede pertenecer todavía al semestre anterior.
+    if (!materiasListas) {
+      setLoading(true)
+      return
+    }
+    if (!claveMateria) {
+      setAlumnos([])
+      setEquipos([])
+      setSeleccion([])
+      setLoading(false)
+      return
+    }
     setLoading(true)
     setSeleccion([])
     Promise.all([alumnosService.listarAlumnos(claveMateria), equiposService.listarEquipos(claveMateria)])
       .then(([alumnosData, equiposData]) => {
+        if (solicitud !== solicitudRef.current) return
         setAlumnos(alumnosData.alumnos)
         setEquipos(equiposData.equipos)
         setError('')
       })
       .catch((err) => {
+        if (solicitud !== solicitudRef.current) return
         setError(err.response?.data?.error || 'No se pudieron cargar los alumnos de la materia')
         setAlumnos([])
         setEquipos([])
       })
-      .finally(() => setLoading(false))
-  }, [claveMateria])
+      .finally(() => {
+        if (solicitud === solicitudRef.current) setLoading(false)
+      })
+  }, [claveMateria, materiasListas])
 
   const materiaActual = materias.find((m) => m.clave === claveMateria)
 
@@ -90,7 +100,7 @@ export default function CrearEquipo() {
   function toggleSeleccion(idAlumno) {
     setSeleccion((prev) => {
       if (prev.includes(idAlumno)) return prev.filter((id) => id !== idAlumno)
-      if (prev.length >= 3) return prev
+      if (prev.length >= INTEGRANTES_MAX) return prev
       return [...prev, idAlumno]
     })
   }
@@ -112,8 +122,12 @@ export default function CrearEquipo() {
       setError('El nombre del equipo es requerido')
       return
     }
-    if (seleccion.length !== 3) {
-      setError('Selecciona exactamente 3 integrantes')
+    if (seleccion.length < INTEGRANTES_MIN || seleccion.length > INTEGRANTES_MAX) {
+      setError('Selecciona 3 o 4 integrantes')
+      return
+    }
+    if (!materiaActual) {
+      setError('Elige una materia')
       return
     }
 
@@ -166,11 +180,18 @@ export default function CrearEquipo() {
               <label className="form-label" htmlFor="materia">
                 Materia
               </label>
+              <SelectorSemestre
+                className="form-control"
+                semestres={semestres}
+                value={semestre}
+                onChange={cambiarSemestre}
+              />
               <select
                 id="materia"
                 className="form-control"
+                style={{ marginTop: 8 }}
                 value={claveMateria}
-                onChange={(e) => setSearchParams({ materia: e.target.value })}
+                onChange={(e) => cambiarMateria(e.target.value)}
               >
                 {materias.map((m) => (
                   <option key={m.id_materia} value={m.clave}>
@@ -203,9 +224,28 @@ export default function CrearEquipo() {
                 ))}
               </div>
             </div>
+            {TIPOS_ESPEJO.includes(tipo) && (
+              <div
+                style={{
+                  fontSize: 12,
+                  color: 'var(--gray-600)',
+                  marginBottom: 16,
+                  padding: '8px 12px',
+                  background: 'var(--blue-light)',
+                  borderRadius: 10,
+                  borderLeft: '3px solid var(--blue)',
+                }}
+              >
+                Los equipos de Práctica y de Tarea comparten integrantes: al crear este equipo se crea también su equipo
+                de {tipo === 'Practica' ? 'Tarea' : 'Práctica'}, con el mismo nombre y los mismos alumnos.
+              </div>
+            )}
             <div className="form-group">
               <label className="form-label">Número de integrantes</label>
-              <div className="form-control">{seleccion.length} / 3</div>
+              <div className="form-control">
+                {seleccion.length} seleccionado{seleccion.length === 1 ? '' : 's'} (mínimo {INTEGRANTES_MIN}, máximo{' '}
+                {INTEGRANTES_MAX})
+              </div>
             </div>
           </div>
         </div>
@@ -249,7 +289,7 @@ export default function CrearEquipo() {
                     borderLeft: '3px solid var(--blue)',
                   }}
                 >
-                  Selecciona 3 integrantes de la lista o usa la asignación aleatoria.
+                  Selecciona 3 o 4 integrantes de la lista, o usa la asignación aleatoria (elige 3).
                 </div>
                 {elegibles.map((al) => {
                   const marcado = seleccion.includes(al.id_alumno)
@@ -291,7 +331,11 @@ export default function CrearEquipo() {
               <button className="btn btn-secondary" onClick={() => navigate(`/equipos?materia=${claveMateria}`)} disabled={guardando}>
                 Cancelar
               </button>
-              <button className="btn btn-primary" onClick={handleSubmit} disabled={guardando || seleccion.length !== 3}>
+              <button
+                className="btn btn-primary"
+                onClick={handleSubmit}
+                disabled={guardando || seleccion.length < INTEGRANTES_MIN || seleccion.length > INTEGRANTES_MAX}
+              >
                 {guardando ? <Loader2 className="icon-sm spin" /> : <Check className="icon-sm" />}
                 Crear equipo
               </button>

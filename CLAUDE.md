@@ -133,7 +133,7 @@ Ver DDL completo en `server/db/schema.sql`.
 | `semestre` | Período académico (ej. 2026/1) |
 | `materia` | Unidad de aprendizaje por semestre y profesor. Borrado lógico vía `estatus ENUM('Activa','En curso','Cerrada')` — ya NO tiene campo `activo` |
 | `materia_alumno` | Inscripción alumno–materia. Baja lógica con `activo` (FALSE = dado de baja de esa materia; reinscribir reactiva la misma fila). Toda consulta de "está inscrito" exige `activo = TRUE` |
-| `equipo` | Grupo colaborativo por tipo de actividad |
+| `equipo` | Grupo colaborativo por tipo de actividad. `id_equipo_espejo INT NULL` (auto-FK) enlaza la fila de Práctica con su gemela de Tarea (mismos integrantes); NULL en Proyecto |
 | `equipo_alumno` | Integrantes del equipo |
 | `actividad` | En clase/práctica/tarea/proyecto publicado por el profesor. `id_equipo` (nullable) y `todos_los_equipos` definen a qué equipo(s) se dirige. `entrega_por_equipo BOOLEAN DEFAULT FALSE` — si TRUE, una entrega de cualquier integrante marca la actividad como completada para todo el equipo. `tipo_evaluacion VARCHAR(60) NULL` — tipo de actividad a evaluar (Ejercicio, Mapa mental, Cuestionario…), texto libre que no altera el ENUM `tipo` |
 | `archivo_actividad` | Archivos adjuntos del profesor a la actividad |
@@ -146,10 +146,14 @@ Ver DDL completo en `server/db/schema.sql`.
 
 ## Reglas de negocio críticas
 
-- Cada equipo tiene exactamente **3 integrantes**.
+- La asignación automática forma equipos de exactamente **3 integrantes** y reporta a los 1–2
+  sobrantes (`sin_asignar`); el alta y la edición manual admiten **3 o 4** (nunca menos de 3 ni
+  más de 4).
 - Un alumno **no puede repetir** equipo por tipo (Práctica, Tarea, Proyecto) dentro de la misma materia.
 - Los equipos `Practica` y `Tarea` **comparten los mismos integrantes**; la diferencia es solo
-  lógica al asignar actividades — no crear equipos duplicados por eso. Del mismo modo, las
+  lógica al asignar actividades — no crear equipos duplicados por eso. Técnicamente cada equipo
+  de Práctica/Tarea son dos filas de `equipo` enlazadas por `id_equipo_espejo`: crear, editar y
+  desactivar opera siempre sobre ambas en una transacción (nunca emparejar por nombre). Del mismo modo, las
   actividades de tipo `'En clase'` y `'Tarea'` se asignan a los mismos equipos (comparten
   integrantes); la diferencia es solo el tipo de actividad.
 - El tipo de `actividad` admite 4 valores: `En clase`, `Practica`, `Tarea`, `Proyecto`. Si
@@ -290,10 +294,10 @@ repo). El resumen de cada una vive en `docs/cierre/S<N>.md`.
 **Pendientes transversales:** los dos que dejó S12 quedaron resueltos en S13 —
 `email.service.js` ya envía por SMTP con nodemailer (opcional: solo si hay variables `SMTP_*`;
 las credenciales reales se configuran en el `.env` del servidor) y los adjuntos se descargan por
-`GET /api/archivos/:tipo/:id`. Lo que sigue abierto es el resto del plan de cierre (S15–S17). Las migraciones `002`
-(`usuario.debe_cambiar_contrasena`, S13) y `003` (`actividad.tipo_evaluacion` y
-`materia_alumno.activo`, S14) deben aplicarse, en ese orden, en toda base existente antes de
-desplegar el código (ver `docs/DEPLOYMENT.md`). Limitaciones confirmadas en S14:
+`GET /api/archivos/:tipo/:id`. Lo que sigue abierto es el resto del plan de cierre (S16–S17). Las migraciones `002`
+(`usuario.debe_cambiar_contrasena`, S13), `003` (`actividad.tipo_evaluacion` y
+`materia_alumno.activo`, S14) y `004` (`equipo.id_equipo_espejo`, S15) deben aplicarse, en ese
+orden, en toda base existente antes de desplegar el código (ver `docs/DEPLOYMENT.md`). Limitaciones confirmadas en S14:
 `docs/LIMITACIONES.md`.
 
 Documentación técnica completa en `docs/`: `ARQUITECTURA.md`, `API.md`, `SECURITY.md`,

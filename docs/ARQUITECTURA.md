@@ -106,11 +106,14 @@ usuario (1) ── (1) profesor ── (N) materia ── (N) equipo ── (N) 
 
 ## Reglas de negocio críticas
 
-- **Equipos de 3.** Cada equipo tiene exactamente 3 integrantes (validado en Joi:
-  `integrantesSchema.length(3)` y de nuevo en el controlador antes del INSERT).
+- **Equipos de 3 (o 4 en alta manual).** La asignación automática forma equipos de exactamente 3 y
+  reporta a los 1–2 alumnos sobrantes; el alta y la edición manual admiten 3 o 4 integrantes (Joi:
+  `integrantesSchema.min(3).max(4)`), para que el profesor absorba a los sobrantes.
 - **Sin repetir compañeros por tipo.** Un alumno no puede tener dos equipos activos del mismo
   tipo (Practica/Tarea/Proyecto) en la misma materia. `Practica` y `Tarea` son **espejo**: comparten
-  integrantes por diseño (`tiposEspejo()` en `asignacion.service.js`); `Proyecto` es independiente.
+  integrantes por diseño (`tiposEspejo()` en `asignacion.service.js`): cada equipo existe como dos filas
+  enlazadas por `equipo.id_equipo_espejo`, y crear, editar o desactivar opera sobre ambas en una
+  transacción (nunca se emparejan por nombre). `Proyecto` es independiente.
   Las actividades de tipo `En clase` también se asignan a los equipos de tipo `Tarea` de la materia.
 - **`entrega_por_equipo`.** Si `TRUE`, la primera entrega de cualquier integrante marca
   automáticamente a todo el equipo como entregado (una transacción SQL); si `FALSE`, cada

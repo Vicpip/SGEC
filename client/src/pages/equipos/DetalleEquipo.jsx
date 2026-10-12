@@ -1,7 +1,9 @@
 // Pantalla 06 — Detalle del Equipo
 // Rol: Profesor
 // URL: /equipos/:id
-// Descripción: Integrantes del equipo y sus calificaciones por actividad. Esta vista es
+// Descripción: Integrantes del equipo y sus calificaciones por actividad. Editar o desactivar
+// un equipo de Práctica o de Tarea se aplica también a su equipo espejo (id_equipo_espejo).
+// Admite 3 o 4 integrantes. Esta vista es
 // SOLO LECTURA para calificaciones — el registro y ajuste ocurre únicamente en
 // BandejaEntregas.jsx (Sesión 9, fuente canónica).
 
@@ -23,6 +25,8 @@ const TIPO_ACTIVIDAD_LABEL = { 'En clase': 'En clase', Practica: 'Práctica', Ta
 const TIPO_VARIANT = { Practica: 'blue', Tarea: 'navy', Proyecto: 'orange' }
 const TIPO_LABEL = { Practica: 'Práctica', Tarea: 'Tarea', Proyecto: 'Proyecto' }
 const TIPOS_ESPEJO = ['Practica', 'Tarea']
+const INTEGRANTES_MIN = 3
+const INTEGRANTES_MAX = 4
 
 function tiposExcluidos(tipo) {
   return TIPOS_ESPEJO.includes(tipo) ? TIPOS_ESPEJO : [tipo]
@@ -99,12 +103,15 @@ export default function DetalleEquipo() {
   const elegibles = useMemo(() => {
     if (!equipo) return []
     const tiposAExcluir = tiposExcluidos(equipo.tipo)
-    // Excluye tanto el propio equipo como su "espejo" (Practica/Tarea con el mismo
-    // nombre comparten integrantes, ver CLAUDE.md) — de lo contrario sus propios
+    // Excluye tanto el propio equipo como su espejo (la fila de Práctica/Tarea enlazada
+    // por id_equipo_espejo, que comparte integrantes) — de lo contrario sus propios
     // integrantes aparecerían como ya ocupados y desaparecerían del pool elegible.
     const idsConEquipo = new Set(
       equiposMateria
-        .filter((eq) => tiposAExcluir.includes(eq.tipo) && eq.id_equipo !== equipo.id_equipo && eq.nombre !== equipo.nombre)
+        .filter(
+          (eq) =>
+            tiposAExcluir.includes(eq.tipo) && eq.id_equipo !== equipo.id_equipo && eq.id_equipo !== equipo.id_equipo_espejo
+        )
         .flatMap((eq) => eq.integrantes.map((it) => it.id_alumno))
     )
     return alumnosMateria.filter((al) => !idsConEquipo.has(al.id_alumno))
@@ -113,14 +120,14 @@ export default function DetalleEquipo() {
   function toggleSeleccion(idAlumno) {
     setSeleccion((prev) => {
       if (prev.includes(idAlumno)) return prev.filter((id) => id !== idAlumno)
-      if (prev.length >= 3) return prev
+      if (prev.length >= INTEGRANTES_MAX) return prev
       return [...prev, idAlumno]
     })
   }
 
   async function handleGuardar() {
-    if (!nombreEdit.trim() || seleccion.length !== 3) {
-      setError('El equipo necesita un nombre y exactamente 3 integrantes')
+    if (!nombreEdit.trim() || seleccion.length < INTEGRANTES_MIN || seleccion.length > INTEGRANTES_MAX) {
+      setError('El equipo necesita un nombre y 3 o 4 integrantes')
       return
     }
     setGuardando(true)
@@ -240,6 +247,22 @@ export default function DetalleEquipo() {
             ))
           ) : (
             <>
+              {equipo.id_equipo_espejo && (
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: 'var(--gray-600)',
+                    marginBottom: 14,
+                    padding: '8px 12px',
+                    background: 'var(--blue-light)',
+                    borderRadius: 10,
+                    borderLeft: '3px solid var(--blue)',
+                  }}
+                >
+                  Los cambios de nombre e integrantes se aplican también a su equipo de{' '}
+                  {equipo.tipo === 'Practica' ? 'Tarea' : 'Práctica'}: ambos comparten integrantes. Elige 3 o 4 alumnos.
+                </div>
+              )}
               <div className="form-group">
                 <label className="form-label" htmlFor="nombre-equipo">
                   Nombre del equipo
@@ -282,7 +305,11 @@ export default function DetalleEquipo() {
                 <button className="btn btn-secondary" onClick={() => setEditando(false)} disabled={guardando}>
                   Cancelar
                 </button>
-                <button className="btn btn-primary" onClick={handleGuardar} disabled={guardando || seleccion.length !== 3}>
+                <button
+                  className="btn btn-primary"
+                  onClick={handleGuardar}
+                  disabled={guardando || seleccion.length < INTEGRANTES_MIN || seleccion.length > INTEGRANTES_MAX}
+                >
                   {guardando ? <Loader2 className="icon-sm spin" /> : <Check className="icon-sm" />}
                   Guardar cambios
                 </button>
@@ -361,11 +388,11 @@ export default function DetalleEquipo() {
           El equipo <strong>{equipo.nombre}</strong> ({TIPO_LABEL[equipo.tipo]}) quedará desactivado: sus integrantes
           volverán a estar disponibles para otro equipo de ese tipo y dejarán de recibir las actividades dirigidas
           a él. Las entregas y calificaciones ya registradas se conservan.
-          {equipo.tipo !== 'Proyecto' && (
+          {equipo.id_equipo_espejo && (
             <>
               {' '}
-              Solo se desactiva este equipo: si existe su equipo gemelo de{' '}
-              {equipo.tipo === 'Practica' ? 'Tarea' : 'Práctica'} con el mismo nombre, desactívalo por separado.
+              <strong>También se desactiva su equipo de {equipo.tipo === 'Practica' ? 'Tarea' : 'Práctica'}</strong>: los
+              equipos de Práctica y de Tarea comparten integrantes y se dan de baja juntos.
             </>
           )}
         </ConfirmDialog>

@@ -102,7 +102,7 @@ export default function TablonProfesor() {
   }
 
   return (
-    <PageWrapper title="Tablón de Avisos" actions={<div className="topbar-semester">2026/1</div>}>
+    <PageWrapper title="Tablón de Avisos">
       <div className="two-col">
         <div className="card" style={{ height: 'fit-content' }}>
           <div className="card-header">

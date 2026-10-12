@@ -1,19 +1,22 @@
 // Pantalla 04 — Lista de Equipos
 // Rol: Profesor
 // URL: /equipos?materia=:clave
-// Descripción: Muestra todos los equipos de una materia. Filtra por tipo.
+// Descripción: Muestra todos los equipos de una materia. Filtra por tipo. Los equipos de
+// Práctica y de Tarea son dos tarjetas del mismo equipo (comparten integrantes y están
+// enlazadas por id_equipo_espejo): desactivar una desactiva también la otra.
 
-import { useEffect, useMemo, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Search, Plus, ArrowRight, Shuffle, Users, Loader2 } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { Search, Plus, ArrowRight, Shuffle, Users, Loader2, AlertTriangle } from 'lucide-react'
 import PageWrapper from '../../components/layout/PageWrapper'
 import Badge from '../../components/ui/Badge'
 import Avatar from '../../components/ui/Avatar'
 import ActionButtons from '../../components/ui/ActionButtons'
 import ConfirmDialog from '../../components/ui/ConfirmDialog'
 import EmptyState from '../../components/ui/EmptyState'
+import SelectorSemestre from '../../components/ui/SelectorSemestre'
+import { useSelectorMateria } from '../../hooks/useSelectorMateria'
 import * as equiposService from '../../services/equipos.service'
-import * as materiasService from '../../services/materias.service'
 
 const TIPO_VARIANT = { Practica: 'blue', Tarea: 'navy', Proyecto: 'orange' }
 const TIPO_LABEL = { Practica: 'Práctica', Tarea: 'Tarea', Proyecto: 'Proyecto' }
@@ -25,10 +28,10 @@ function iniciales(integrante) {
 
 export default function ListaEquipos() {
   const navigate = useNavigate()
-  const [searchParams, setSearchParams] = useSearchParams()
-  const claveMateria = searchParams.get('materia') ?? ''
+  const { claveMateria, cambiarMateria, semestres, semestre, cambiarSemestre, materias, materiasListas } = useSelectorMateria()
+  // Numera las cargas para descartar la respuesta de una materia que ya no es la elegida.
+  const solicitudRef = useRef(0)
 
-  const [materias, setMaterias] = useState([])
   const [materia, setMateria] = useState(null)
   const [equipos, setEquipos] = useState([])
   const [loading, setLoading] = useState(true)
@@ -38,47 +41,61 @@ export default function ListaEquipos() {
   const [tipoGenerar, setTipoGenerar] = useState('Practica')
   const [generando, setGenerando] = useState(false)
   const [avisoGenerar, setAvisoGenerar] = useState(null)
+  // Alumnos que la asignación automática no pudo acomodar: [{ id_alumno, nombre }].
+  const [sinAsignar, setSinAsignar] = useState([])
   const [equipoADesactivar, setEquipoADesactivar] = useState(null)
 
-  useEffect(() => {
-    materiasService
-      .listarMaterias()
-      .then((data) => {
-        setMaterias(data)
-        if (!claveMateria && data[0]) {
-          setSearchParams({ materia: data[0].clave }, { replace: true })
-        }
-      })
-      .catch(() => {})
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
   function cargarEquipos() {
-    if (!claveMateria) return
+    const solicitud = ++solicitudRef.current
+    // Mientras se carga la lista de materias del semestre elegido no se pide nada: la
+    // materia de la URL puede pertenecer todavía al semestre anterior.
+    if (!materiasListas) {
+      setLoading(true)
+      return
+    }
+    if (!claveMateria) {
+      // Sin materia elegida (el semestre filtrado no tiene materias): no hay nada que listar.
+      setEquipos([])
+      setMateria(null)
+      setError('')
+      setLoading(false)
+      return
+    }
     setLoading(true)
     equiposService
       .listarEquipos(claveMateria)
       .then((data) => {
+        if (solicitud !== solicitudRef.current) return
         setEquipos(data.equipos)
         setMateria(data.materia)
         setError('')
       })
       .catch((err) => {
+        if (solicitud !== solicitudRef.current) return
         setError(err.response?.data?.error || 'No se pudieron cargar los equipos')
         setEquipos([])
         setMateria(null)
       })
-      .finally(() => setLoading(false))
+      .finally(() => {
+        if (solicitud === solicitudRef.current) setLoading(false)
+      })
   }
 
   useEffect(() => {
     cargarEquipos()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [claveMateria])
+  }, [claveMateria, materiasListas])
 
   function handleCambioMateria(e) {
-    setSearchParams({ materia: e.target.value })
+    cambiarMateria(e.target.value)
     setAvisoGenerar(null)
+    setSinAsignar([])
+  }
+
+  function handleCambioSemestre(clave) {
+    cambiarSemestre(clave)
+    setAvisoGenerar(null)
+    setSinAsignar([])
   }
 
   async function handleConfirmarDesactivar() {
@@ -91,18 +108,22 @@ export default function ListaEquipos() {
     if (!materia) return
     setGenerando(true)
     setAvisoGenerar(null)
+    setSinAsignar([])
     setError('')
     try {
       const data = await equiposService.generarEquipos({ id_materia: materia.id_materia, tipo: tipoGenerar })
+      const sobrantes = data.sin_asignar ?? []
       setAvisoGenerar(
-        `Se crearon ${data.equipos_creados} equipo(s) de tipo ${TIPO_LABEL[tipoGenerar]}. ` +
-          (data.alumnos_sin_asignar > 0
-            ? `${data.alumnos_sin_asignar} alumno(s) quedaron sin asignar.`
-            : 'Todos los alumnos disponibles fueron asignados.')
+        `Se crearon ${data.equipos_creados} equipo(s) de ${
+          tipoGenerar === 'Proyecto' ? 'Proyecto' : 'Práctica y Tarea (comparten integrantes)'
+        }. ` + (sobrantes.length > 0 ? '' : 'Todos los alumnos disponibles fueron asignados.')
       )
+      setSinAsignar(sobrantes)
       cargarEquipos()
     } catch (err) {
       setError(err.response?.data?.error || 'No se pudieron generar los equipos')
+      // Con menos de 3 alumnos disponibles el servidor dice quiénes son.
+      setSinAsignar(err.response?.data?.sin_asignar ?? [])
     } finally {
       setGenerando(false)
     }
@@ -164,6 +185,7 @@ export default function ListaEquipos() {
             onChange={(e) => setBusqueda(e.target.value)}
           />
         </div>
+        <SelectorSemestre semestres={semestres} value={semestre} onChange={handleCambioSemestre} />
         {materias.length > 0 && (
           <select className="select-input" value={claveMateria} onChange={handleCambioMateria}>
             {materias.map((m) => (
@@ -216,17 +238,39 @@ export default function ListaEquipos() {
         </div>
       )}
 
+      {sinAsignar.length > 0 && (
+        <div className="credenciales-aviso" style={{ marginBottom: 16 }}>
+          <AlertTriangle className="icon-sm" />
+          <div>
+            <strong>
+              {sinAsignar.length === 1 ? 'Quedó 1 alumno sin equipo' : `Quedaron ${sinAsignar.length} alumnos sin equipo`} de{' '}
+              {tipoGenerar === 'Proyecto' ? 'Proyecto' : 'Práctica/Tarea'}:
+            </strong>{' '}
+            {sinAsignar.map((s) => s.nombre).join(', ')}. La asignación automática forma equipos de 3; agrégalos a mano
+            a un equipo existente desde su detalle (un equipo admite hasta 4 integrantes).
+          </div>
+        </div>
+      )}
+
       {loading ? (
         <div style={{ padding: 48, textAlign: 'center' }}>
           <Loader2 className="icon-xl spin" style={{ color: 'var(--blue)' }} />
         </div>
       ) : equiposFiltrados.length === 0 ? (
         <div className="card">
-          <EmptyState
-            icon={Users}
-            title="Sin equipos registrados"
-            description="Crea un equipo manualmente o usa la asignación aleatoria masiva."
-          />
+          {materiasListas && materias.length === 0 ? (
+            <EmptyState
+              icon={Users}
+              title={semestre ? `Sin materias en el semestre ${semestre}` : 'Sin materias registradas'}
+              description={semestre ? 'Elige otro semestre o crea una materia en este.' : 'Crea una materia para poder formar equipos.'}
+            />
+          ) : (
+            <EmptyState
+              icon={Users}
+              title="Sin equipos registrados"
+              description="Crea un equipo manualmente o usa la asignación aleatoria masiva."
+            />
+          )}
         </div>
       ) : (
         <div className="equipo-grid">
@@ -269,11 +313,13 @@ export default function ListaEquipos() {
           El equipo <strong>{equipoADesactivar.nombre}</strong> ({TIPO_LABEL[equipoADesactivar.tipo]}) quedará desactivado: sus integrantes
           volverán a estar disponibles para otro equipo de ese tipo y dejarán de recibir las actividades dirigidas
           a él. Las entregas y calificaciones ya registradas se conservan.
-          {equipoADesactivar.tipo !== 'Proyecto' && (
+          {equipoADesactivar.id_equipo_espejo && (
             <>
               {' '}
-              Solo se desactiva este equipo: si existe su equipo gemelo de{' '}
-              {equipoADesactivar.tipo === 'Practica' ? 'Tarea' : 'Práctica'} con el mismo nombre, desactívalo por separado.
+              <strong>
+                También se desactiva su equipo de {equipoADesactivar.tipo === 'Practica' ? 'Tarea' : 'Práctica'}
+              </strong>
+              : los equipos de Práctica y de Tarea comparten integrantes y se dan de baja juntos.
             </>
           )}
         </ConfirmDialog>

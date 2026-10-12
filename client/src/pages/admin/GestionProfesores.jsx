@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Search, Plus, Loader2, RotateCcw } from 'lucide-react'
 import ConfirmDialog from '../../components/ui/ConfirmDialog'
-import PageWrapper from '../../components/layout/PageWrapper'
+import PageWrapper, { SemestreActivo } from '../../components/layout/PageWrapper'
 import Badge from '../../components/ui/Badge'
 import Avatar from '../../components/ui/Avatar'
 import ActionButtons from '../../components/ui/ActionButtons'
@@ -248,7 +248,7 @@ export default function GestionProfesores() {
       title="Gestión de Profesores"
       actions={
         <>
-          <div className="topbar-semester">2026/1</div>
+          <SemestreActivo />
           <button className="btn btn-primary" onClick={() => setFormProfesor({})}>
             <Plus className="icon-sm" />
             Nuevo profesor

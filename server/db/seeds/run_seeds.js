@@ -19,6 +19,7 @@ const SEED_FILES = [
   '08_entregas.sql',
   '09_calificaciones.sql',
   '10_avisos.sql',
+  '11_semestre_2026_2.sql',
 ]
 
 async function runSeeds() {

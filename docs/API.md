@@ -21,8 +21,8 @@ general de `/api`: `/login` 5 intentos/15 min, `/forgot-password` 3 intentos/15 
 
 | Método | Ruta | Rol | Body / params | Respuestas |
 |---|---|---|---|---|
-| POST | `/auth/login` | Público | `{correo_institucional, contrasena, rol}` | 200 `{token, usuario}` (`usuario.debe_cambiar_contrasena` indica contraseña temporal pendiente de cambio); 400 dominio de correo no corresponde al rol; 401 credenciales inválidas; 403 cuenta inactiva; 429 demasiados intentos |
-| GET | `/auth/me` | Autenticado | — | 200 `{usuario}` (incluye `debe_cambiar_contrasena`); 401 usuario inactivo o eliminado |
+| POST | `/auth/login` | Público | `{correo_institucional, contrasena, rol}` | 200 `{token, usuario}` (`usuario.debe_cambiar_contrasena` indica contraseña temporal pendiente de cambio; `usuario.semestre_activo` es la clave del semestre activo o `null`); 400 dominio de correo no corresponde al rol; 401 credenciales inválidas; 403 cuenta inactiva; 429 demasiados intentos |
+| GET | `/auth/me` | Autenticado | — | 200 `{usuario}` (incluye `debe_cambiar_contrasena` y `semestre_activo`: el semestre con `activo = TRUE` de fecha de inicio más reciente, que muestra el topbar); 401 usuario inactivo o eliminado |
 | POST | `/auth/logout` | Autenticado | — | 200 `{message}` (stateless: solo confirma, el cliente descarta el token) |
 | POST | `/auth/forgot-password` | Público | `{correo_institucional}` | 200 siempre `{message}` genérico (no revela si el correo existe); 429 |
 | POST | `/auth/reset-password` | Público | `{token, nueva_contrasena}` | 200 `{message}` (pone `debe_cambiar_contrasena` en FALSE); 400 token inválido o expirado (vigencia 24 h) |
@@ -75,7 +75,7 @@ cualquiera.
 |---|---|---|---|---|
 | GET | `/materias` | Profesor (las suyas) / Administrador (todas) | `?semestre=<clave>` | 200 `{materias}` (incluye `total_alumnos`, `total_equipos`) |
 | GET | `/materias/:id` | Profesor dueño / Administrador | — | 200 `{materia}`; 403; 404 |
-| POST | `/materias` | Profesor, Administrador | `{clave, nombre, grupo, id_semestre, id_profesor (requerido solo si lo crea un Administrador)}` | 201 `{materia}`; 400 semestre/profesor inexistente; 409 clave duplicada en el semestre; 422 el semestre está inactivo |
+| POST | `/materias` | Profesor, Administrador | `{clave, nombre, grupo, id_semestre, id_profesor (requerido solo si lo crea un Administrador)}` | 201 `{materia}`; 400 semestre/profesor inexistente; 409 ya existe esa combinación clave + grupo + semestre (la misma clave con otro grupo sí se permite); 422 el semestre está inactivo |
 | PUT | `/materias/:id` | Profesor dueño / Administrador | `{clave, nombre, grupo, id_semestre, estatus, id_profesor?}` | 200 `{message}`; 403; 404; 409; 422 si se intenta mover la materia a un semestre inactivo (editar una que ya está en él sí se permite) |
 | PATCH | `/materias/:id/desactivar` | Profesor dueño / Administrador | — | 200 `{message}` (`estatus = 'Cerrada'`); 403; 404 |
 
@@ -86,6 +86,7 @@ Pantallas 07, 08, 09. Un Profesor solo ve alumnos de materias donde es dueño.
 | Método | Ruta | Rol | Body / params | Respuestas |
 |---|---|---|---|---|
 | GET | `/alumnos?materia=<clave>` | Profesor | — | 200 `{alumnos, materia}`; 400 falta `materia`; 404 materia no encontrada/no propia |
+| GET | `/alumnos/buscar?q=<texto>` | Administrador | `q`: parte del correo institucional o de la boleta (mínimo 3 caracteres) | 200 `{alumnos}`: como máximo 10, cada uno solo con `{id_alumno, nombre, correo_institucional, boleta, activo, acceso_pendiente}`; 400 `q` ausente o de menos de 3 caracteres; 403 Profesor o Alumno |
 | GET | `/alumnos/:id` | Profesor (con materia compartida) | — | 200 `{alumno}`; 403 sin materia en común; 404 |
 | GET | `/alumnos/:id/actividades` | Profesor (con materia compartida) | — | 200 `{alumno, actividades}` (incluye equipo y calificación por actividad); 403; 404 |
 | POST | `/alumnos` | Profesor | `{boleta, nombre, apellido_paterno, apellido_materno?, correo, grupo, carrera?, materia}` (`materia` = clave) | 201 `{alumno, credenciales}`; 400 datos inválidos; 404 materia no propia; 409 boleta/correo en conflicto |
@@ -128,10 +129,16 @@ Escritura: solo Profesor.
 |---|---|---|---|---|
 | GET | `/equipos?materia=<clave>` | Profesor / Alumno (ignora `materia`, siempre los suyos) | — | 200 `{equipos, materia?}` (con integrantes) |
 | GET | `/equipos/:id` | Profesor dueño / Alumno integrante | — | 200 `{equipo}`; 403; 404 |
-| POST | `/equipos` | Profesor | `{id_materia, nombre, tipo: Practica|Tarea|Proyecto, integrantes: [3 ids únicos]}` | 201 `{equipo}`; 400 integrante no inscrito; 404 materia no propia; 409 integrante ya tiene equipo de ese tipo |
-| POST | `/equipos/generar` | Profesor | `{id_materia, tipo}` | 201 `{equipos, equipos_creados, alumnos_sin_asignar, ids_alumnos_sin_asignar}`; 404 materia no propia; 422 menos de 3 alumnos disponibles |
-| PUT | `/equipos/:id` | Profesor dueño | `{nombre, integrantes: [3 ids únicos]}` | 200 `{message}`; 400; 403; 404; 409 |
-| PATCH | `/equipos/:id/desactivar` | Profesor dueño | — | 200 `{message}`; 403; 404 |
+| POST | `/equipos` | Profesor | `{id_materia, nombre, tipo: Practica|Tarea|Proyecto, integrantes: [3 o 4 ids únicos]}` | 201 `{equipo, equipo_espejo}` (`equipo_espejo` = `{id_equipo, tipo}` de la fila gemela, o `null` en Proyecto); 400 menos de 3, más de 4, repetidos o integrante no inscrito; 404 materia no propia; 409 integrante ya tiene equipo de ese tipo |
+| POST | `/equipos/generar` | Profesor | `{id_materia, tipo}` | 201 `{equipos, equipos_creados, alumnos_sin_asignar, ids_alumnos_sin_asignar, sin_asignar: [{id_alumno, nombre}]}`; 404 materia no propia; 422 `{error, alumnos_disponibles, sin_asignar}` con menos de 3 alumnos disponibles |
+| PUT | `/equipos/:id` | Profesor dueño | `{nombre, integrantes: [3 o 4 ids únicos]}` | 200 `{message, equipos_actualizados: [ids]}`; 400; 403; 404; 409 |
+| PATCH | `/equipos/:id/desactivar` | Profesor dueño | — | 200 `{message, equipos_desactivados: [ids]}`; 403; 404 |
+
+**Espejo Práctica/Tarea.** Un equipo de Práctica o de Tarea son dos filas de `equipo` (una por tipo, mismos
+integrantes) enlazadas por `id_equipo_espejo`, que viene en el listado y en el detalle (`null` en Proyecto).
+`POST /equipos` crea las dos filas; `PUT` y `PATCH …/desactivar` se pueden invocar con el id de cualquiera de
+las dos y operan sobre ambas en una sola transacción. `/equipos/generar` siempre forma equipos de exactamente 3;
+los 1–2 alumnos que sobran vuelven en `sin_asignar` y se agregan a mano (el alta/edición manual admite 4).
 
 `Practica` y `Tarea` son tipos espejo: `generar` sobre cualquiera de los dos crea ambas filas de
 `equipo` con los mismos integrantes en una sola pasada. `Proyecto` se reagrupa de forma
@@ -221,12 +228,43 @@ llega a "encontrarla").
 
 | Método | Ruta | Rol | Body / params | Respuestas |
 |---|---|---|---|---|
-| GET | `/reportes?semestre=&materia=&tipo=` | Profesor | — | 200 `{generado_en, filtros, equipos: [...], resumen}` (JSON para vista previa) |
+| GET | `/reportes?semestre=&materia=&tipo=` | Profesor | `tipo`: `Practica`, `Tarea`, `Proyecto` o `Todos` | 200 `{generado_en, filtros, equipos: [...], resumen, nota_promedio, nota_realizadas}` (JSON para vista previa); 400 `tipo` no válido |
 | GET | `/reportes/pdf?semestre=&materia=&tipo=` | Profesor | — | 200 `application/pdf`, `Content-Disposition: attachment` |
 | GET | `/reportes/excel?semestre=&materia=&tipo=` | Profesor | — | 200 `application/vnd...spreadsheetml.sheet`, `Content-Disposition: attachment` |
 
 Cada fila de `equipos` trae los 6 campos requeridos: profesor, unidad de aprendizaje (materia),
-nombre del equipo, integrantes, promedio obtenido, % actividades realizadas / no realizadas.
+nombre del equipo, integrantes, promedio obtenido, % actividades realizadas / no realizadas — más
+`semestre`, `grupo`, `tipos`, `tipo_etiqueta`, `ids_equipo`, `total_integrantes`, `actividades_total`,
+`pares_total`, `pares_realizados`, `pares_no_realizados` y `actividades: [{id_actividad, titulo, tipo,
+tipo_evaluacion, fecha_limite, entrega_por_equipo, pares_total, pares_realizados, promedio}]`.
+
+Cómo se calcula (Sesión 15):
+
+- **Una fila por equipo.** El par Práctica/Tarea (filas enlazadas por `id_equipo_espejo`) sale como una sola
+  fila con `tipo_etiqueta = "Práctica / Tarea"` que reúne las actividades de Práctica, Tarea y En clase;
+  Proyecto va aparte. Con `?tipo=` la fila se limita a ese tipo de equipo y a sus actividades.
+- **Realizada, por pares (actividad, integrante).** `pct_realizadas` = pares realizados ÷ pares totales. Un par
+  cuenta si el integrante tiene una entrega con estatus distinto de `Pendiente` o una calificación registrada
+  (cubre las actividades En clase sin archivo). Con `entrega_por_equipo = TRUE` la entrega de un integrante
+  marca a todo el equipo; con `FALSE` cuenta cada integrante.
+- **Denominador.** Solo actividades activas y ya publicadas (una programada cuya `fecha_publicacion` no ha
+  llegado no cuenta) y solo integrantes con inscripción vigente (`materia_alumno.activo = TRUE`).
+- **Promedio.** Solo de las calificaciones registradas (una actividad sin nota no cuenta como 0); el PDF, el
+  Excel y la pantalla lo indican en una nota al pie. `resumen.total_integrantes` cuenta alumnos distintos.
+- El Excel trae dos hojas: `Reporte` (una fila por equipo) y `Actividades` (el detalle, con tipo de evaluación).
+
+## dashboard
+
+| Método | Ruta | Rol | Body / params | Respuestas |
+|---|---|---|---|---|
+| GET | `/dashboard` | Profesor / Alumno | — | 200; 403 Administrador |
+
+El contenido depende del rol del JWT. **Profesor:** `{semestre, materias_activas, equipos, alumnos_inscritos,
+actividades_recientes, avisos_recientes}`. **Alumno** (Panel del Alumno, Pantalla 12): `{semestre, resumen:
+{equipos_activos, actividades_asignadas, actividades_realizadas, actividades_pendientes, promedio_general,
+avisos_sin_leer}, equipos, proximas_actividades (máx. 5; primero las que siguen en plazo, con `vencida`),
+ultimas_calificaciones (máx. 5), avisos_sin_leer (máx. 3)}`, siempre acotado a su propio `id_alumno` y con las
+mismas reglas de visibilidad de "Mis actividades" y del Tablón (nunca una actividad programada sin publicar).
 
 ## archivos
 

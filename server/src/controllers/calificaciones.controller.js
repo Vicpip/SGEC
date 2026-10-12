@@ -85,9 +85,17 @@ async function registrar(req, res) {
     return res.status(422).json({ error: 'El equipo indicado no está entre los equipos objetivo de esta actividad' })
   }
 
-  const [integrantes] = await pool.query('SELECT id_alumno FROM equipo_alumno WHERE id_equipo = ?', [id_equipo])
+  // Solo integrantes con inscripción vigente en la materia (materia_alumno.activo = TRUE):
+  // no se registra una nota nueva a un alumno dado de baja de la materia.
+  const [integrantes] = await pool.query(
+    `SELECT ea.id_alumno
+     FROM equipo_alumno ea
+     JOIN materia_alumno ma ON ma.id_materia = ? AND ma.id_alumno = ea.id_alumno AND ma.activo = TRUE
+     WHERE ea.id_equipo = ?`,
+    [actividad.id_materia, id_equipo]
+  )
   if (integrantes.length === 0) {
-    return res.status(422).json({ error: 'El equipo no tiene integrantes registrados' })
+    return res.status(422).json({ error: 'El equipo no tiene integrantes inscritos en la materia' })
   }
   const idsAlumnos = integrantes.map((i) => i.id_alumno)
 

@@ -17,6 +17,7 @@ const { validateEnv } = require('../config/env')
 const { enviarCorreoRecuperacion } = require('../services/email.service')
 const { dominiosPermitidosPorRol, dominioValido } = require('../utils/correoInstitucional')
 const { obtenerDatosExtendidos } = require('../services/usuarios.service')
+const { obtenerSemestreActivo } = require('../services/semestres.service')
 
 const {
   RONDAS_BCRYPT,
@@ -81,10 +82,17 @@ async function login(req, res) {
   const debeCambiarContrasena = Boolean(usuario.debe_cambiar_contrasena)
   const { token, payload } = firmarToken(usuario, debeCambiarContrasena)
   const datosExtendidos = await obtenerDatosExtendidos(usuario)
+  const semestreActivo = await obtenerSemestreActivo()
 
   res.status(200).json({
     token,
-    usuario: { ...payload, ...datosExtendidos, debe_cambiar_contrasena: debeCambiarContrasena },
+    usuario: {
+      ...payload,
+      ...datosExtendidos,
+      debe_cambiar_contrasena: debeCambiarContrasena,
+      // Clave del semestre activo (o null): la muestra el topbar de toda pantalla.
+      semestre_activo: semestreActivo?.clave ?? null,
+    },
   })
 }
 
@@ -97,6 +105,7 @@ async function me(req, res) {
   }
 
   const datosExtendidos = await obtenerDatosExtendidos(usuario)
+  const semestreActivo = await obtenerSemestreActivo()
 
   res.status(200).json({
     usuario: {
@@ -108,6 +117,7 @@ async function me(req, res) {
       apellido_materno: usuario.apellido_materno,
       ...datosExtendidos,
       debe_cambiar_contrasena: Boolean(usuario.debe_cambiar_contrasena),
+      semestre_activo: semestreActivo?.clave ?? null,
     },
   })
 }

@@ -1,10 +1,11 @@
 // Pantalla 13 — Perfil y Configuración
 // Rol: Todos
 // URL: /perfil
-// Descripción: Datos personales de solo lectura, edición de foto y cambio de contraseña.
+// Descripción: Datos personales de solo lectura, preferencias de notificación editables
+// (correo alterno y avisos por correo) y cambio de contraseña.
 
 import { useEffect, useState } from 'react'
-import { Camera, Pencil, Lock, Eye, EyeOff, Loader2, AlertTriangle } from 'lucide-react'
+import { Pencil, Lock, Eye, EyeOff, Loader2, AlertTriangle, Check } from 'lucide-react'
 import PageWrapper from '../../components/layout/PageWrapper'
 import Badge from '../../components/ui/Badge'
 import Avatar from '../../components/ui/Avatar'
@@ -15,6 +16,8 @@ import * as usuariosService from '../../services/usuarios.service'
 const REGLA_CONTRASENA = /^(?=.*[A-Z])(?=.*[0-9]).{8,}$/
 
 const ROL_LABEL = { Administrador: 'Administrador', Profesor: 'Profesor', Alumno: 'Alumno' }
+
+const FORMATO_CORREO = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 function iniciales(persona) {
   const a = persona?.nombre?.[0] ?? ''
@@ -155,6 +158,51 @@ export default function Perfil() {
   const [perfil, setPerfil] = useState(user)
   const [loading, setLoading] = useState(true)
 
+  // Edición de las preferencias de notificación (lo único editable de "Datos personales").
+  const [editando, setEditando] = useState(false)
+  const [correoAlterno, setCorreoAlterno] = useState('')
+  const [notificaciones, setNotificaciones] = useState(true)
+  const [guardando, setGuardando] = useState(false)
+  const [errorDatos, setErrorDatos] = useState('')
+  const [exitoDatos, setExitoDatos] = useState('')
+
+  function iniciarEdicion() {
+    setCorreoAlterno(perfil?.correo_alterno ?? '')
+    setNotificaciones(perfil?.notificaciones_email == null ? true : Boolean(perfil.notificaciones_email))
+    setErrorDatos('')
+    setExitoDatos('')
+    setEditando(true)
+  }
+
+  async function guardarDatos() {
+    const correo = correoAlterno.trim()
+    if (correo && !FORMATO_CORREO.test(correo)) {
+      setErrorDatos('El correo alterno no tiene un formato válido')
+      return
+    }
+
+    setGuardando(true)
+    setErrorDatos('')
+    try {
+      // El endpoint exige nombre y apellidos: se reenvían tal cual, sin cambios.
+      await usuariosService.actualizarUsuario(user.id_usuario, {
+        nombre: perfil.nombre,
+        apellido_paterno: perfil.apellido_paterno,
+        apellido_materno: perfil.apellido_materno ?? '',
+        correo_alterno: correo,
+        notificaciones_email: notificaciones,
+      })
+      setPerfil((prev) => ({ ...prev, correo_alterno: correo || null, notificaciones_email: notificaciones }))
+      setEditando(false)
+      setExitoDatos('Preferencias de notificación actualizadas')
+    } catch (err) {
+      const detalle = err.response?.data?.errores?.[0]
+      setErrorDatos(detalle || err.response?.data?.error || 'No se pudieron guardar los cambios')
+    } finally {
+      setGuardando(false)
+    }
+  }
+
   useEffect(() => {
     if (!user?.id_usuario) return
     // Con la contraseña temporal la API solo atiende /api/auth/*: se muestra lo que ya
@@ -208,22 +256,19 @@ export default function Perfil() {
                 </span>
               </div>
             </div>
-            <div style={{ marginLeft: 'auto' }}>
-              <button className="btn btn-sm" style={{ background: 'rgba(255,255,255,.15)', color: 'white', border: '1px solid rgba(255,255,255,.3)' }}>
-                <Camera className="icon-sm" />
-                Editar foto
-              </button>
-            </div>
           </div>
         </div>
 
         <div className="card mb20">
           <div className="card-header">
             <span className="card-title">Datos personales</span>
-            <button className="btn btn-secondary btn-sm">
-              <Pencil className="icon-sm" />
-              Editar
-            </button>
+            {/* Con la contraseña temporal la API solo atiende /api/auth/*: no se ofrece editar. */}
+            {!editando && !debeCambiarContrasena && !loading && (
+              <button type="button" className="btn btn-secondary btn-sm" onClick={iniciarEdicion}>
+                <Pencil className="icon-sm" />
+                Editar
+              </button>
+            )}
           </div>
           <div className="card-body">
             <div className="form-row">
@@ -274,6 +319,69 @@ export default function Perfil() {
                   <label className="form-label">Grupo</label>
                   <div className="form-control">{perfil?.grupo ?? '—'}</div>
                 </div>
+              </div>
+            )}
+
+            <div className="form-row">
+              <div className="form-group">
+                <label className="form-label" htmlFor="correo-alterno">
+                  Correo alterno
+                </label>
+                {editando ? (
+                  <input
+                    id="correo-alterno"
+                    type="email"
+                    className="form-control"
+                    placeholder="Opcional: otro correo para recibir avisos"
+                    maxLength={150}
+                    value={correoAlterno}
+                    onChange={(e) => setCorreoAlterno(e.target.value)}
+                  />
+                ) : (
+                  <div className="form-control">{perfil?.correo_alterno || '—'}</div>
+                )}
+              </div>
+              <div className="form-group">
+                <label className="form-label" htmlFor="notificaciones-email">
+                  Notificaciones por correo
+                </label>
+                {editando ? (
+                  <label className="form-control" style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                    <input
+                      id="notificaciones-email"
+                      type="checkbox"
+                      checked={notificaciones}
+                      onChange={(e) => setNotificaciones(e.target.checked)}
+                    />
+                    Recibir notificaciones por correo
+                  </label>
+                ) : (
+                  <div className="form-control">
+                    {perfil?.notificaciones_email == null || perfil.notificaciones_email ? 'Activadas' : 'Desactivadas'}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {errorDatos && (
+              <div className="login-error" style={{ marginBottom: 16 }}>
+                {errorDatos}
+              </div>
+            )}
+            {exitoDatos && !editando && (
+              <div style={{ padding: '8px 12px', background: 'var(--blue-light)', borderRadius: 10, fontSize: 12, color: 'var(--green)' }}>
+                {exitoDatos}
+              </div>
+            )}
+            {editando && (
+              <div className="form-actions">
+                <button type="button" className="btn btn-secondary" onClick={() => setEditando(false)} disabled={guardando}>
+                  Cancelar
+                </button>
+                <button type="button" className="btn btn-primary" onClick={guardarDatos} disabled={guardando}>
+                  {guardando ? <Loader2 className="icon-sm spin" /> : <Check className="icon-sm" />}
+                  Guardar
+                </button>
               </div>
             )}
           </div>

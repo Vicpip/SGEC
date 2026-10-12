@@ -10,6 +10,7 @@ import {
   UserCog,
   Award,
   CalendarRange,
+  KeyRound,
   LogOut,
   X,
 } from 'lucide-react'
@@ -126,6 +127,7 @@ export default function Sidebar({ open = false, onClose }) {
           <div className="sbl">Administración</div>
           <NavItem icon={UserCog} label="Profesores" to="/admin/profesores" onNavigate={handleNavigate} pathname={pathname} />
           <NavItem icon={CalendarRange} label="Semestres" to="/admin/semestres" onNavigate={handleNavigate} pathname={pathname} />
+          <NavItem icon={KeyRound} label="Accesos de alumnos" to="/admin/accesos" onNavigate={handleNavigate} pathname={pathname} />
         </div>
       )}
 

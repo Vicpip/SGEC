@@ -33,7 +33,7 @@ const ESTATUS_VARIANT = { Pendiente: 'red', 'En revision': 'yellow', Calificada:
 const ACCESOS_RAPIDOS = [
   { icon: Upload, iconBg: '#EBF0FA', iconColor: 'var(--blue)', titulo: 'Importar Alumnos', desc: 'Subir lista desde Excel', to: '/alumnos/importar' },
   { icon: Plus, iconBg: '#F0FDF4', iconColor: 'var(--green)', titulo: 'Nuevo Equipo', desc: 'Crear equipo por materia', to: '/equipos/nuevo' },
-  { icon: Pencil, iconBg: '#FFFBEB', iconColor: 'var(--yellow)', titulo: 'Calificar Actividad', desc: 'Registrar calificaciones', to: null },
+  { icon: Pencil, iconBg: '#FFFBEB', iconColor: 'var(--yellow)', titulo: 'Calificar Actividad', desc: 'Registrar calificaciones', to: '/actividades' },
   { icon: BarChart2, iconBg: '#EBF0FA', iconColor: 'var(--blue)', titulo: 'Generar Reporte', desc: 'Exportar PDF o Excel', to: '/reportes' },
   { icon: Megaphone, iconBg: '#FFF7ED', iconColor: 'var(--orange)', titulo: 'Tablón de Avisos', desc: 'Publicar avisos al grupo', to: '/tablon' },
 ]
@@ -125,10 +125,10 @@ export default function DashboardProfesor() {
       title="Dashboard"
       actions={
         <>
-          <div className="topbar-semester">Semestre {semestreClave}</div>
-          <div className="topbar-icon">
+          <div className="topbar-semester">{resumen?.semestre ? `Semestre ${semestreClave}` : 'Sin semestre activo'}</div>
+          <button type="button" className="topbar-icon" aria-label="Tablón de Avisos" onClick={() => navigate('/tablon')}>
             <Bell className="icon" />
-          </div>
+          </button>
         </>
       }
     >
@@ -151,7 +151,7 @@ export default function DashboardProfesor() {
       </div>
       <div className="quick-grid mb24">
         {ACCESOS_RAPIDOS.map((a) => (
-          <div key={a.titulo} className="quick-card" onClick={a.to ? () => navigate(a.to) : undefined}>
+          <div key={a.titulo} className="quick-card" onClick={() => navigate(a.to)}>
             <div className="quick-icon" style={{ background: a.iconBg }}>
               <a.icon className="icon-lg" style={{ color: a.iconColor }} />
             </div>
@@ -164,8 +164,8 @@ export default function DashboardProfesor() {
       <div className="two-col mb20">
         <div className="card">
           <div className="card-header">
-            <span className="card-title">Materias — {semestreClave}</span>
-            <Badge variant="blue">{materias.length} activas</Badge>
+            <span className="card-title">Mis materias</span>
+            <Badge variant="blue">{materias.length}</Badge>
           </div>
           <div className="table-wrap">
             {materias.length === 0 ? (

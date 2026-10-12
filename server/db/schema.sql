@@ -102,21 +102,28 @@ CREATE TABLE materia_alumno (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ── 7. equipo ────────────────────────────────────────────────────────────
--- Equipo colaborativo de 3 integrantes por tipo dentro de una materia.
+-- Equipo colaborativo por tipo dentro de una materia: 3 integrantes en la
+-- asignación automática, 3 o 4 en el alta/edición manual.
 -- Los equipos de tipo 'Practica' y 'Tarea' comparten integrantes; la
--- diferencia es solo lógica al asignar actividades (ver README).
+-- diferencia es solo lógica al asignar actividades (ver README). Cada equipo
+-- de Práctica/Tarea existe como dos filas (una por tipo) enlazadas entre sí
+-- por id_equipo_espejo; crear, editar y desactivar opera sobre ambas.
 CREATE TABLE equipo (
   id_equipo   INT AUTO_INCREMENT PRIMARY KEY,
   id_materia  INT NOT NULL,
   nombre      VARCHAR(100) NOT NULL,
   tipo        ENUM('Practica', 'Tarea', 'Proyecto') NOT NULL,
+  -- Fila gemela del otro tipo (Practica <-> Tarea). NULL en los equipos de Proyecto.
+  id_equipo_espejo INT NULL,
   activo      BOOLEAN NOT NULL DEFAULT TRUE,
   fecha_creacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  CONSTRAINT fk_equipo_materia FOREIGN KEY (id_materia) REFERENCES materia(id_materia)
+  CONSTRAINT fk_equipo_materia FOREIGN KEY (id_materia) REFERENCES materia(id_materia),
+  KEY idx_equipo_espejo (id_equipo_espejo),
+  CONSTRAINT fk_equipo_espejo FOREIGN KEY (id_equipo_espejo) REFERENCES equipo(id_equipo)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ── 8. equipo_alumno ─────────────────────────────────────────────────────
--- Integrantes de un equipo (exactamente 3 por equipo, validado en backend).
+-- Integrantes de un equipo (3 o 4 por equipo, validado en backend).
 CREATE TABLE equipo_alumno (
   id_equipo_alumno  INT AUTO_INCREMENT PRIMARY KEY,
   id_equipo         INT NOT NULL,

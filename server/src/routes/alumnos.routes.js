@@ -48,10 +48,12 @@ const router = Router()
 router.use(authMiddleware)
 
 // El rol va por ruta (no con router.use) porque restablecer-acceso también admite al
-// Administrador; el resto del módulo es exclusivo del Profesor.
+// Administrador y el buscador es exclusivo de él; el resto del módulo es del Profesor.
 const soloProfesor = requireRole('Profesor')
 
 router.get('/', soloProfesor, asyncHandler(alumnosController.listar))
+// Antes de '/:id' para que "buscar" no se interprete como un id de alumno.
+router.get('/buscar', requireRole('Administrador'), asyncHandler(alumnosController.buscar))
 router.get('/:id', soloProfesor, asyncHandler(alumnosController.obtener))
 router.get('/:id/actividades', soloProfesor, asyncHandler(alumnosController.actividadesDeAlumno))
 router.post('/', soloProfesor, validateBody(crearAlumnoSchema), asyncHandler(alumnosController.crear))

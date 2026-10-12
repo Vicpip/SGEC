@@ -10,6 +10,7 @@
 
 const fs = require('fs')
 const pool = require('../config/db')
+const { condicionAvisoVisibleAlumnoSQL } = require('../services/avisos.service')
 
 async function obtenerIdProfesorPropio(idUsuario) {
   const [rows] = await pool.query('SELECT id_profesor FROM profesor WHERE id_usuario = ?', [idUsuario])
@@ -103,19 +104,7 @@ async function listarParaAlumno(req, res) {
     LEFT JOIN materia m ON m.id_materia = a.id_materia
     LEFT JOIN aviso_leido leido ON leido.id_aviso = a.id_aviso AND leido.id_alumno = ?
     WHERE a.activo = TRUE
-      AND (
-        -- Aviso dirigido a una materia específica: el alumno debe estar inscrito en ella.
-        (a.id_materia IS NOT NULL AND a.id_materia IN (SELECT id_materia FROM materia_alumno WHERE id_alumno = ? AND activo = TRUE))
-        OR
-        -- Aviso global (id_materia = NULL): dirigido a todos los alumnos de todas las
-        -- materias ACTIVAS de ese profesor — nunca a todos los alumnos del sistema.
-        (a.id_materia IS NULL AND a.id_profesor IN (
-          SELECT DISTINCT m2.id_profesor
-          FROM materia m2
-          JOIN materia_alumno ma2 ON ma2.id_materia = m2.id_materia
-          WHERE ma2.id_alumno = ? AND ma2.activo = TRUE AND m2.estatus != 'Cerrada'
-        ))
-      )
+      AND ${condicionAvisoVisibleAlumnoSQL('a')}
   `
   const params = [idAlumno, idAlumno, idAlumno]
 
