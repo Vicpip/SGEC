@@ -172,7 +172,7 @@ async function crear(req, res) {
     return res.status(404).json({ error: 'Materia no encontrada' })
   }
 
-  const [inscritos] = await pool.query('SELECT id_alumno FROM materia_alumno WHERE id_materia = ? AND id_alumno IN (?)', [
+  const [inscritos] = await pool.query('SELECT id_alumno FROM materia_alumno WHERE id_materia = ? AND activo = TRUE AND id_alumno IN (?)', [
     id_materia,
     integrantes,
   ])
@@ -229,7 +229,7 @@ async function actualizar(req, res) {
     return res.status(403).json({ error: 'No tienes permiso para editar este equipo' })
   }
 
-  const [inscritos] = await pool.query('SELECT id_alumno FROM materia_alumno WHERE id_materia = ? AND id_alumno IN (?)', [
+  const [inscritos] = await pool.query('SELECT id_alumno FROM materia_alumno WHERE id_materia = ? AND activo = TRUE AND id_alumno IN (?)', [
     equipo.id_materia,
     integrantes,
   ])
@@ -304,7 +304,7 @@ async function generar(req, res) {
     return res.status(404).json({ error: 'Materia no encontrada' })
   }
 
-  const [inscritosRows] = await pool.query('SELECT id_alumno FROM materia_alumno WHERE id_materia = ?', [id_materia])
+  const [inscritosRows] = await pool.query('SELECT id_alumno FROM materia_alumno WHERE id_materia = ? AND activo = TRUE', [id_materia])
   const idsInscritos = inscritosRows.map((r) => r.id_alumno)
 
   const idsConEquipo = await idsAlumnosConEquipoDeTipo(id_materia, tipo)

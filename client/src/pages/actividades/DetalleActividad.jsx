@@ -7,7 +7,8 @@
 
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Inbox, Loader2, ClipboardList, Users, User, Clock } from 'lucide-react'
+import { ArrowLeft, Inbox, Loader2, ClipboardList, Users, User, Clock, Pencil, Trash2 } from 'lucide-react'
+import ConfirmDialog from '../../components/ui/ConfirmDialog'
 import PageWrapper from '../../components/layout/PageWrapper'
 import Badge from '../../components/ui/Badge'
 import EmptyState from '../../components/ui/EmptyState'
@@ -34,6 +35,12 @@ export default function DetalleActividad() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [equiposCalificaciones, setEquiposCalificaciones] = useState([])
+  const [confirmarBaja, setConfirmarBaja] = useState(false)
+
+  async function handleConfirmarDesactivar() {
+    await actividadesService.desactivarActividad(actividad.id_actividad)
+    navigate(`/actividades?materia=${actividad.materia_clave}`)
+  }
 
   useEffect(() => {
     setLoading(true)
@@ -91,9 +98,27 @@ export default function DetalleActividad() {
             <Inbox className="icon-sm" />
             Ver entregas
           </button>
+          {!!actividad.activo && (
+            <>
+              <button className="btn btn-primary btn-sm" onClick={() => navigate(`/actividades/${actividad.id_actividad}/editar`)}>
+                <Pencil className="icon-sm" />
+                Editar
+              </button>
+              <button className="btn btn-danger btn-sm" onClick={() => setConfirmarBaja(true)}>
+                <Trash2 className="icon-sm" />
+                Desactivar
+              </button>
+            </>
+          )}
         </>
       }
     >
+      {!actividad.activo && (
+        <div className="login-error" style={{ marginBottom: 16, textAlign: 'left' }}>
+          Esta actividad está desactivada: ya no es visible para los alumnos ni se puede editar.
+        </div>
+      )}
+
       <div className="card mb20">
         <div style={{ padding: '16px 20px', display: 'flex', gap: 24, flexWrap: 'wrap', alignItems: 'center' }}>
           <div>
@@ -105,6 +130,10 @@ export default function DetalleActividad() {
           <div style={{ borderLeft: '1px solid var(--gray-200)', paddingLeft: 24 }}>
             <div className="text-xs mb8">Tipo</div>
             <Badge variant={TIPO_VARIANT[actividad.tipo] ?? 'gray'}>{TIPO_LABEL[actividad.tipo] ?? actividad.tipo}</Badge>
+          </div>
+          <div style={{ borderLeft: '1px solid var(--gray-200)', paddingLeft: 24 }}>
+            <div className="text-xs mb8">Tipo de evaluación</div>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>{actividad.tipo_evaluacion || '—'}</div>
           </div>
           <div style={{ borderLeft: '1px solid var(--gray-200)', paddingLeft: 24 }}>
             <div className="text-xs mb8">Fecha límite</div>
@@ -234,6 +263,20 @@ export default function DetalleActividad() {
           </div>
         )}
       </div>
+
+      {confirmarBaja && (
+        <ConfirmDialog
+          titulo="Desactivar actividad"
+          textoConfirmar="Desactivar"
+          mensajeError="No se pudo desactivar la actividad"
+          onCancelar={() => setConfirmarBaja(false)}
+          onConfirmar={handleConfirmarDesactivar}
+        >
+          La actividad <strong>{actividad.titulo}</strong> dejará de aparecer para ti y para los alumnos. Sus entregas
+          y calificaciones se conservan en la base de datos, pero ya no podrás consultarlas desde el sistema. Esta
+          acción no se puede deshacer desde la aplicación.
+        </ConfirmDialog>
+      )}
     </PageWrapper>
   )
 }

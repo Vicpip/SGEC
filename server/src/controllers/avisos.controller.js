@@ -66,7 +66,7 @@ async function listarParaProfesor(req, res) {
   const avisosConTotales = await Promise.all(
     avisos.map(async (aviso) => {
       if (aviso.id_materia) {
-        const [rows] = await pool.query('SELECT COUNT(*) AS total FROM materia_alumno WHERE id_materia = ?', [
+        const [rows] = await pool.query('SELECT COUNT(*) AS total FROM materia_alumno WHERE id_materia = ? AND activo = TRUE', [
           aviso.id_materia,
         ])
         return { ...aviso, total_notificados: rows[0].total }
@@ -75,7 +75,7 @@ async function listarParaProfesor(req, res) {
         `SELECT COUNT(DISTINCT ma.id_alumno) AS total
          FROM materia_alumno ma
          JOIN materia m ON m.id_materia = ma.id_materia
-         WHERE m.id_profesor = ? AND m.estatus != 'Cerrada'`,
+         WHERE m.id_profesor = ? AND ma.activo = TRUE AND m.estatus != 'Cerrada'`,
         [idProfesor]
       )
       return { ...aviso, total_notificados: rows[0].total }
@@ -105,7 +105,7 @@ async function listarParaAlumno(req, res) {
     WHERE a.activo = TRUE
       AND (
         -- Aviso dirigido a una materia específica: el alumno debe estar inscrito en ella.
-        (a.id_materia IS NOT NULL AND a.id_materia IN (SELECT id_materia FROM materia_alumno WHERE id_alumno = ?))
+        (a.id_materia IS NOT NULL AND a.id_materia IN (SELECT id_materia FROM materia_alumno WHERE id_alumno = ? AND activo = TRUE))
         OR
         -- Aviso global (id_materia = NULL): dirigido a todos los alumnos de todas las
         -- materias ACTIVAS de ese profesor — nunca a todos los alumnos del sistema.
@@ -113,7 +113,7 @@ async function listarParaAlumno(req, res) {
           SELECT DISTINCT m2.id_profesor
           FROM materia m2
           JOIN materia_alumno ma2 ON ma2.id_materia = m2.id_materia
-          WHERE ma2.id_alumno = ? AND m2.estatus != 'Cerrada'
+          WHERE ma2.id_alumno = ? AND ma2.activo = TRUE AND m2.estatus != 'Cerrada'
         ))
       )
   `
@@ -218,7 +218,7 @@ async function marcarLeido(req, res) {
   // activa compartida con él).
   let visible = false
   if (aviso.id_materia) {
-    const [rows] = await pool.query('SELECT 1 FROM materia_alumno WHERE id_materia = ? AND id_alumno = ?', [
+    const [rows] = await pool.query('SELECT 1 FROM materia_alumno WHERE id_materia = ? AND id_alumno = ? AND activo = TRUE', [
       aviso.id_materia,
       idAlumno,
     ])
@@ -227,7 +227,7 @@ async function marcarLeido(req, res) {
     const [rows] = await pool.query(
       `SELECT 1 FROM materia m
        JOIN materia_alumno ma ON ma.id_materia = m.id_materia
-       WHERE m.id_profesor = ? AND ma.id_alumno = ? AND m.estatus != 'Cerrada' LIMIT 1`,
+       WHERE m.id_profesor = ? AND ma.id_alumno = ? AND ma.activo = TRUE AND m.estatus != 'Cerrada' LIMIT 1`,
       [aviso.id_profesor, idAlumno]
     )
     visible = rows.length > 0

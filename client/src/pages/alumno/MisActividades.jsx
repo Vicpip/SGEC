@@ -61,6 +61,11 @@ function FilaActividad({ actividad, navigate }) {
       </td>
       <td>
         <Badge variant={TIPO_VARIANT[actividad.tipo] ?? 'gray'}>{TIPO_LABEL[actividad.tipo] ?? actividad.tipo}</Badge>
+        {actividad.tipo_evaluacion && (
+          <div className="text-xs" style={{ marginTop: 4 }}>
+            {actividad.tipo_evaluacion}
+          </div>
+        )}
       </td>
       <td className="text-sm">{actividad.equipo_nombre ?? '—'}</td>
       <td>

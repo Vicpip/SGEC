@@ -10,6 +10,7 @@ import PageWrapper from '../../components/layout/PageWrapper'
 import Badge from '../../components/ui/Badge'
 import Avatar from '../../components/ui/Avatar'
 import ActionButtons from '../../components/ui/ActionButtons'
+import ConfirmDialog from '../../components/ui/ConfirmDialog'
 import EmptyState from '../../components/ui/EmptyState'
 import * as equiposService from '../../services/equipos.service'
 import * as materiasService from '../../services/materias.service'
@@ -37,6 +38,7 @@ export default function ListaEquipos() {
   const [tipoGenerar, setTipoGenerar] = useState('Practica')
   const [generando, setGenerando] = useState(false)
   const [avisoGenerar, setAvisoGenerar] = useState(null)
+  const [equipoADesactivar, setEquipoADesactivar] = useState(null)
 
   useEffect(() => {
     materiasService
@@ -79,13 +81,10 @@ export default function ListaEquipos() {
     setAvisoGenerar(null)
   }
 
-  async function handleDesactivar(equipo) {
-    try {
-      await equiposService.desactivarEquipo(equipo.id_equipo)
-      cargarEquipos()
-    } catch (err) {
-      setError(err.response?.data?.error || 'No se pudo desactivar el equipo')
-    }
+  async function handleConfirmarDesactivar() {
+    await equiposService.desactivarEquipo(equipoADesactivar.id_equipo)
+    setEquipoADesactivar(null)
+    cargarEquipos()
   }
 
   async function handleGenerar() {
@@ -249,7 +248,7 @@ export default function ListaEquipos() {
                 ))}
               </div>
               <div className="flex-between">
-                <ActionButtons onView={() => navigate(`/equipos/${eq.id_equipo}`)} onDelete={() => handleDesactivar(eq)} />
+                <ActionButtons onView={() => navigate(`/equipos/${eq.id_equipo}`)} onDelete={() => setEquipoADesactivar(eq)} />
                 <span className="btn btn-ghost btn-sm" onClick={() => navigate(`/equipos/${eq.id_equipo}`)}>
                   Ver detalle <ArrowRight className="icon-sm" />
                 </span>
@@ -257,6 +256,27 @@ export default function ListaEquipos() {
             </div>
           ))}
         </div>
+      )}
+
+      {equipoADesactivar && (
+        <ConfirmDialog
+          titulo="Desactivar equipo"
+          textoConfirmar="Desactivar"
+          mensajeError="No se pudo desactivar el equipo"
+          onCancelar={() => setEquipoADesactivar(null)}
+          onConfirmar={handleConfirmarDesactivar}
+        >
+          El equipo <strong>{equipoADesactivar.nombre}</strong> ({TIPO_LABEL[equipoADesactivar.tipo]}) quedará desactivado: sus integrantes
+          volverán a estar disponibles para otro equipo de ese tipo y dejarán de recibir las actividades dirigidas
+          a él. Las entregas y calificaciones ya registradas se conservan.
+          {equipoADesactivar.tipo !== 'Proyecto' && (
+            <>
+              {' '}
+              Solo se desactiva este equipo: si existe su equipo gemelo de{' '}
+              {equipoADesactivar.tipo === 'Practica' ? 'Tarea' : 'Práctica'} con el mismo nombre, desactívalo por separado.
+            </>
+          )}
+        </ConfirmDialog>
       )}
     </PageWrapper>
   )

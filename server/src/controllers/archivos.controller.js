@@ -75,7 +75,7 @@ async function resolverActividad(idArchivo, usuario) {
   const idAlumno = await obtenerIdAlumnoPropio(usuario.id_usuario)
   if (idAlumno === null) return { status: 403 }
 
-  const [inscrito] = await pool.query('SELECT 1 FROM materia_alumno WHERE id_materia = ? AND id_alumno = ? LIMIT 1', [
+  const [inscrito] = await pool.query('SELECT 1 FROM materia_alumno WHERE id_materia = ? AND id_alumno = ? AND activo = TRUE LIMIT 1', [
     archivo.id_materia,
     idAlumno,
   ])
@@ -155,7 +155,7 @@ async function resolverAviso(idArchivo, usuario) {
 
   let visible
   if (archivo.id_materia) {
-    ;[visible] = await pool.query('SELECT 1 FROM materia_alumno WHERE id_materia = ? AND id_alumno = ? LIMIT 1', [
+    ;[visible] = await pool.query('SELECT 1 FROM materia_alumno WHERE id_materia = ? AND id_alumno = ? AND activo = TRUE LIMIT 1', [
       archivo.id_materia,
       idAlumno,
     ])
@@ -163,7 +163,7 @@ async function resolverAviso(idArchivo, usuario) {
     ;[visible] = await pool.query(
       `SELECT 1 FROM materia m
        JOIN materia_alumno ma ON ma.id_materia = m.id_materia
-       WHERE m.id_profesor = ? AND ma.id_alumno = ? AND m.estatus != 'Cerrada' LIMIT 1`,
+       WHERE m.id_profesor = ? AND ma.id_alumno = ? AND ma.activo = TRUE AND m.estatus != 'Cerrada' LIMIT 1`,
       [archivo.id_profesor, idAlumno]
     )
   }

@@ -122,6 +122,10 @@ export default function AppRouter() {
         element={<ProtectedRoute roles={['Profesor']}><PublicarActividad /></ProtectedRoute>}
       />
       <Route
+        path="/actividades/:id/editar"
+        element={<ProtectedRoute roles={['Profesor']}><PublicarActividad /></ProtectedRoute>}
+      />
+      <Route
         path="/actividades/:id/entregas"
         element={<ProtectedRoute roles={['Profesor']}><BandejaEntregas /></ProtectedRoute>}
       />

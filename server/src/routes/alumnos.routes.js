@@ -6,7 +6,7 @@ const { requireRole } = require('../middlewares/role.middleware')
 const { validateBody } = require('../middlewares/validate.middleware')
 const asyncHandler = require('../utils/asyncHandler')
 const { validateEnv } = require('../config/env')
-const { crearAlumnoSchema } = require('../validators/alumnos.validators')
+const { crearAlumnoSchema, actualizarAlumnoSchema } = require('../validators/alumnos.validators')
 
 const env = validateEnv()
 
@@ -56,6 +56,8 @@ router.get('/:id', soloProfesor, asyncHandler(alumnosController.obtener))
 router.get('/:id/actividades', soloProfesor, asyncHandler(alumnosController.actividadesDeAlumno))
 router.post('/', soloProfesor, validateBody(crearAlumnoSchema), asyncHandler(alumnosController.crear))
 router.post('/importar', soloProfesor, subirExcel, asyncHandler(alumnosController.importarExcel))
+router.put('/:id', soloProfesor, validateBody(actualizarAlumnoSchema), asyncHandler(alumnosController.actualizar))
+router.patch('/:id/baja', soloProfesor, asyncHandler(alumnosController.darDeBaja))
 router.post(
   '/:id/restablecer-acceso',
   requireRole('Profesor', 'Administrador'),

@@ -19,3 +19,8 @@ export function actualizarUsuario(id, payload) {
 export function desactivarUsuario(id) {
   return api.patch(`/usuarios/${id}/desactivar`).then(({ data }) => data)
 }
+
+// Revierte la baja lógica de un profesor (solo Administrador).
+export function reactivarProfesor(id) {
+  return api.patch(`/usuarios/${id}/reactivar`).then(({ data }) => data)
+}

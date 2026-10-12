@@ -17,6 +17,7 @@ import PageWrapper from '../../components/layout/PageWrapper'
 import Badge from '../../components/ui/Badge'
 import EmptyState from '../../components/ui/EmptyState'
 import ActionButtons from '../../components/ui/ActionButtons'
+import ConfirmDialog from '../../components/ui/ConfirmDialog'
 import * as materiasService from '../../services/materias.service'
 import * as actividadesService from '../../services/actividades.service'
 
@@ -37,6 +38,7 @@ export default function ListaActividades() {
   const [actividades, setActividades] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [actividadADesactivar, setActividadADesactivar] = useState(null)
 
   useEffect(() => {
     materiasService
@@ -74,13 +76,10 @@ export default function ListaActividades() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [claveMateria])
 
-  async function handleDesactivar(actividad) {
-    try {
-      await actividadesService.desactivarActividad(actividad.id_actividad)
-      cargarActividades()
-    } catch (err) {
-      setError(err.response?.data?.error || 'No se pudo desactivar la actividad')
-    }
+  async function handleConfirmarDesactivar() {
+    await actividadesService.desactivarActividad(actividadADesactivar.id_actividad)
+    setActividadADesactivar(null)
+    cargarActividades()
   }
 
   return (
@@ -146,6 +145,7 @@ export default function ListaActividades() {
                   <tr>
                     <th>Actividad</th>
                     <th>Tipo</th>
+                    <th>Evaluación</th>
                     <th>Dirigida a</th>
                     <th>Entrega</th>
                     <th>Fecha límite</th>
@@ -166,6 +166,7 @@ export default function ListaActividades() {
                       <td>
                         <Badge variant={TIPO_VARIANT[a.tipo] ?? 'gray'}>{TIPO_LABEL[a.tipo] ?? a.tipo}</Badge>
                       </td>
+                      <td className="text-sm">{a.tipo_evaluacion || '—'}</td>
                       <td className="text-sm">{a.todos_los_equipos ? 'Todos los equipos' : a.equipo_nombre ?? '—'}</td>
                       <td>
                         {a.entrega_por_equipo ? (
@@ -184,7 +185,8 @@ export default function ListaActividades() {
                       <td onClick={(e) => e.stopPropagation()}>
                         <ActionButtons
                           onView={() => navigate(`/actividades/${a.id_actividad}`)}
-                          onDelete={() => handleDesactivar(a)}
+                          onEdit={() => navigate(`/actividades/${a.id_actividad}/editar`)}
+                          onDelete={() => setActividadADesactivar(a)}
                         />
                       </td>
                     </tr>
@@ -194,6 +196,20 @@ export default function ListaActividades() {
             </div>
           )}
         </div>
+      )}
+
+      {actividadADesactivar && (
+        <ConfirmDialog
+          titulo="Desactivar actividad"
+          textoConfirmar="Desactivar"
+          mensajeError="No se pudo desactivar la actividad"
+          onCancelar={() => setActividadADesactivar(null)}
+          onConfirmar={handleConfirmarDesactivar}
+        >
+          La actividad <strong>{actividadADesactivar.titulo}</strong> dejará de aparecer para ti y para los alumnos.
+          Sus entregas y calificaciones se conservan en la base de datos, pero ya no podrás consultarlas desde el
+          sistema. Esta acción no se puede deshacer desde la aplicación.
+        </ConfirmDialog>
       )}
     </PageWrapper>
   )

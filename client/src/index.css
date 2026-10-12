@@ -157,6 +157,8 @@ body {
 
 /* ── Buttons ── */
 .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: var(--r-btn); font-size: 13px; font-weight: 500; font-family: inherit; cursor: pointer; border: none; white-space: nowrap; }
+/* Un botón deshabilitado debe verse deshabilitado (p. ej. "Restablecer acceso" de una cuenta ya activada). */
+.btn:disabled { opacity: .5; cursor: not-allowed; }
 .btn-primary { background: var(--blue); color: white; }
 .btn-primary:hover { background: var(--navy); }
 .btn-secondary { background: white; color: var(--gray-600); border: 1px solid var(--gray-200); }

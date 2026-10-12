@@ -281,7 +281,7 @@ El modelo relacional está compuesto por **16 tablas**:
 | `alumno` | Extiende `usuario`: boleta, grupo, carrera |
 | `semestre` | Período académico (ej. 2026/1) |
 | `materia` | Unidad de aprendizaje por semestre y profesor |
-| `materia_alumno` | Inscripción alumno–materia |
+| `materia_alumno` | Inscripción alumno–materia (baja lógica con `activo`) |
 | `equipo` | Grupo colaborativo por tipo de actividad |
 | `equipo_alumno` | Integrantes del equipo |
 | `actividad` | Tarea/práctica/proyecto publicado por el profesor |

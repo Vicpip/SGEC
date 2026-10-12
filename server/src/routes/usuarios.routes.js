@@ -23,5 +23,6 @@ router.post(
 )
 router.put('/:id', validateBody(actualizarUsuarioSchema), asyncHandler(usuariosController.actualizar))
 router.patch('/:id/desactivar', requireRole('Administrador'), asyncHandler(usuariosController.desactivar))
+router.patch('/:id/reactivar', requireRole('Administrador'), asyncHandler(usuariosController.reactivar))
 
 module.exports = router

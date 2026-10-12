@@ -7,7 +7,7 @@
 --   - Todas las PK son INT AUTO_INCREMENT.
 --   - snake_case en todos los nombres de tabla y columna.
 --   - Borrado lógico, nunca DELETE físico, en: usuario, equipo, actividad,
---     aviso (campo `activo`) y materia (campo `estatus = 'Cerrada'`).
+--     aviso, materia_alumno (campo `activo`) y materia (campo `estatus = 'Cerrada'`).
 --   - contrasena_hash almacena el hash bcrypt, nunca la contraseña en claro.
 --   - correo_institucional es único y debe pertenecer a un dominio permitido
 --     (ver ALLOWED_EMAIL_DOMAINS en server/.env).
@@ -87,11 +87,14 @@ CREATE TABLE materia (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ── 6. materia_alumno ────────────────────────────────────────────────────
--- Inscripción de un alumno a una materia.
+-- Inscripción de un alumno a una materia. Baja lógica con `activo`.
 CREATE TABLE materia_alumno (
   id_materia_alumno  INT AUTO_INCREMENT PRIMARY KEY,
   id_materia         INT NOT NULL,
   id_alumno          INT NOT NULL,
+  -- Baja lógica de la inscripción: FALSE = el alumno fue dado de baja de la materia (se
+  -- conserva su historial). Reinscribirlo reactiva esta misma fila.
+  activo             BOOLEAN NOT NULL DEFAULT TRUE,
   fecha_inscripcion  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT fk_materia_alumno_materia FOREIGN KEY (id_materia) REFERENCES materia(id_materia),
   CONSTRAINT fk_materia_alumno_alumno FOREIGN KEY (id_alumno) REFERENCES alumno(id_alumno),
@@ -140,6 +143,8 @@ CREATE TABLE actividad (
   titulo            VARCHAR(150) NOT NULL,
   descripcion       TEXT NULL,
   tipo              ENUM('En clase', 'Practica', 'Tarea', 'Proyecto') NOT NULL,
+  -- Tipo de actividad a evaluar (Ejercicio, Mapa mental, Cuestionario, Reporte…): texto libre.
+  tipo_evaluacion   VARCHAR(60) NULL,
   fecha_limite      DATETIME NOT NULL,
   programada        BOOLEAN NOT NULL DEFAULT FALSE,
   fecha_publicacion DATETIME NULL,

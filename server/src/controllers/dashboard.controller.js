@@ -49,7 +49,7 @@ async function obtener(req, res) {
     `SELECT COUNT(DISTINCT ma.id_alumno) AS total
      FROM materia_alumno ma
      JOIN materia m ON m.id_materia = ma.id_materia
-     WHERE m.id_profesor = ? AND m.estatus != 'Cerrada'`,
+     WHERE m.id_profesor = ? AND ma.activo = TRUE AND m.estatus != 'Cerrada'`,
     [idProfesor]
   )
 

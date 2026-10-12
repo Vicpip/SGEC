@@ -7,7 +7,8 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Pencil, Check, Loader2, ClipboardList } from 'lucide-react'
+import { ArrowLeft, Pencil, Check, Loader2, ClipboardList, Trash2 } from 'lucide-react'
+import ConfirmDialog from '../../components/ui/ConfirmDialog'
 import PageWrapper from '../../components/layout/PageWrapper'
 import Badge from '../../components/ui/Badge'
 import Avatar from '../../components/ui/Avatar'
@@ -46,6 +47,12 @@ export default function DetalleEquipo() {
   const [equiposMateria, setEquiposMateria] = useState([])
   const [guardando, setGuardando] = useState(false)
   const [actividadesCalificadas, setActividadesCalificadas] = useState([])
+  const [confirmarBaja, setConfirmarBaja] = useState(false)
+
+  async function handleConfirmarDesactivar() {
+    await equiposService.desactivarEquipo(equipo.id_equipo)
+    navigate(`/equipos?materia=${equipo.materia_clave}`)
+  }
 
   function cargar() {
     setLoading(true)
@@ -168,11 +175,17 @@ export default function DetalleEquipo() {
             <ArrowLeft className="icon-sm" />
             Volver
           </button>
-          {!editando && (
-            <button className="btn btn-primary btn-sm" onClick={iniciarEdicion}>
-              <Pencil className="icon-sm" />
-              Editar
-            </button>
+          {!editando && !!equipo.activo && (
+            <>
+              <button className="btn btn-primary btn-sm" onClick={iniciarEdicion}>
+                <Pencil className="icon-sm" />
+                Editar
+              </button>
+              <button className="btn btn-danger btn-sm" onClick={() => setConfirmarBaja(true)}>
+                <Trash2 className="icon-sm" />
+                Desactivar
+              </button>
+            </>
           )}
         </>
       }
@@ -336,6 +349,27 @@ export default function DetalleEquipo() {
           </div>
         )}
       </div>
+
+      {confirmarBaja && (
+        <ConfirmDialog
+          titulo="Desactivar equipo"
+          textoConfirmar="Desactivar"
+          mensajeError="No se pudo desactivar el equipo"
+          onCancelar={() => setConfirmarBaja(false)}
+          onConfirmar={handleConfirmarDesactivar}
+        >
+          El equipo <strong>{equipo.nombre}</strong> ({TIPO_LABEL[equipo.tipo]}) quedará desactivado: sus integrantes
+          volverán a estar disponibles para otro equipo de ese tipo y dejarán de recibir las actividades dirigidas
+          a él. Las entregas y calificaciones ya registradas se conservan.
+          {equipo.tipo !== 'Proyecto' && (
+            <>
+              {' '}
+              Solo se desactiva este equipo: si existe su equipo gemelo de{' '}
+              {equipo.tipo === 'Practica' ? 'Tarea' : 'Práctica'} con el mismo nombre, desactívalo por separado.
+            </>
+          )}
+        </ConfirmDialog>
+      )}
     </PageWrapper>
   )
 }

@@ -1,10 +1,12 @@
 // Pantalla 11 — Gestión de Profesores
 // Rol: Administrador
 // URL: /admin/profesores
-// Descripción: Alta, edición y baja lógica de cuentas de profesor a nivel institucional.
+// Descripción: Alta, edición, baja lógica y reactivación de cuentas de profesor a nivel
+// institucional.
 
 import { useEffect, useMemo, useState } from 'react'
-import { Search, Plus, Loader2 } from 'lucide-react'
+import { Search, Plus, Loader2, RotateCcw } from 'lucide-react'
+import ConfirmDialog from '../../components/ui/ConfirmDialog'
 import PageWrapper from '../../components/layout/PageWrapper'
 import Badge from '../../components/ui/Badge'
 import Avatar from '../../components/ui/Avatar'
@@ -181,6 +183,8 @@ export default function GestionProfesores() {
   const [busqueda, setBusqueda] = useState('')
   const [departamento, setDepartamento] = useState('')
   const [formProfesor, setFormProfesor] = useState(null) // null = oculto, {} = crear, {...} = editar
+  const [profesorADesactivar, setProfesorADesactivar] = useState(null)
+  const [reactivando, setReactivando] = useState(null) // id_usuario en curso
 
   async function cargar() {
     setLoading(true)
@@ -221,16 +225,21 @@ export default function GestionProfesores() {
     cargar()
   }
 
-  async function handleDesactivar(profesor) {
-    const nombreCompleto = `${profesor.nombre} ${profesor.apellido_paterno}`
-    if (!window.confirm(`¿Desactivar la cuenta de ${nombreCompleto}? Podrá reactivarse más adelante.`)) {
-      return
-    }
+  async function handleConfirmarDesactivar() {
+    await usuariosService.desactivarUsuario(profesorADesactivar.id_usuario)
+    setProfesorADesactivar(null)
+    cargar()
+  }
+
+  async function handleReactivar(profesor) {
+    setReactivando(profesor.id_usuario)
     try {
-      await usuariosService.desactivarUsuario(profesor.id_usuario)
-      cargar()
+      await usuariosService.reactivarProfesor(profesor.id_usuario)
+      await cargar()
     } catch (err) {
-      setError(err.response?.data?.error || 'No se pudo desactivar al profesor')
+      setError(err.response?.data?.error || 'No se pudo reactivar al profesor')
+    } finally {
+      setReactivando(null)
     }
   }
 
@@ -319,10 +328,28 @@ export default function GestionProfesores() {
                       <Badge variant={p.activo ? 'green' : 'red'}>{p.activo ? 'Activo' : 'Inactivo'}</Badge>
                     </td>
                     <td>
-                      <ActionButtons
-                        onEdit={() => setFormProfesor(p)}
-                        onDelete={p.activo ? () => handleDesactivar(p) : undefined}
-                      />
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <ActionButtons
+                          onEdit={() => setFormProfesor(p)}
+                          onDelete={p.activo ? () => setProfesorADesactivar(p) : undefined}
+                        />
+                        {!p.activo && (
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            onClick={() => handleReactivar(p)}
+                            disabled={reactivando === p.id_usuario}
+                            title="Volver a activar la cuenta de este profesor"
+                          >
+                            {reactivando === p.id_usuario ? (
+                              <Loader2 className="icon-sm spin" />
+                            ) : (
+                              <RotateCcw className="icon-sm" />
+                            )}
+                            Reactivar
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -343,6 +370,23 @@ export default function GestionProfesores() {
           {profesoresFiltrados.length === 1 ? '' : 's'}
         </div>
       </div>
+
+      {profesorADesactivar && (
+        <ConfirmDialog
+          titulo="Dar de baja al profesor"
+          textoConfirmar="Dar de baja"
+          mensajeError="No se pudo desactivar al profesor"
+          onCancelar={() => setProfesorADesactivar(null)}
+          onConfirmar={handleConfirmarDesactivar}
+        >
+          La cuenta de{' '}
+          <strong>
+            {profesorADesactivar.nombre} {profesorADesactivar.apellido_paterno}
+          </strong>{' '}
+          quedará inactiva y no podrá iniciar sesión. Sus materias, equipos, actividades y calificaciones se conservan.
+          Puedes reactivarla en cualquier momento con el botón «Reactivar» de esta misma lista.
+        </ConfirmDialog>
+      )}
     </PageWrapper>
   )
 }

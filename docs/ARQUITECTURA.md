@@ -96,7 +96,7 @@ usuario (1) ── (1) profesor ── (N) materia ── (N) equipo ── (N) 
 | `profesor` / `alumno` | Extienden `usuario` (1:1) con datos propios del rol |
 | `semestre` | Período académico |
 | `materia` | Unidad de aprendizaje por semestre y profesor; borrado lógico vía `estatus` |
-| `materia_alumno` | Inscripción alumno–materia |
+| `materia_alumno` | Inscripción alumno–materia. Baja lógica con `activo` (Sesión 14): reinscribir reactiva la misma fila |
 | `equipo` / `equipo_alumno` | Equipo de 3 integrantes por tipo (Practica/Tarea/Proyecto) y sus miembros |
 | `actividad` | En clase/Practica/Tarea/Proyecto; dirigida a un equipo o a todos los de un tipo |
 | `archivo_actividad` | Adjuntos del profesor a la actividad |

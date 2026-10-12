@@ -229,6 +229,10 @@ export default function BandejaEntregas() {
             <Badge variant="blue">{TIPO_LABEL[actividad.tipo] ?? actividad.tipo}</Badge>
           </div>
           <div style={{ borderLeft: '1px solid var(--gray-200)', paddingLeft: 24 }}>
+            <div className="text-xs mb8">Tipo de evaluación</div>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>{actividad.tipo_evaluacion || '—'}</div>
+          </div>
+          <div style={{ borderLeft: '1px solid var(--gray-200)', paddingLeft: 24 }}>
             <div className="text-xs mb8">Fecha límite</div>
             <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--red)' }}>{formatFecha(actividad.fecha_limite)}</div>
           </div>

@@ -18,7 +18,7 @@ const SELECT_BASE = `
   JOIN semestre s ON s.id_semestre = m.id_semestre
   JOIN profesor p ON p.id_profesor = m.id_profesor
   JOIN usuario u ON u.id_usuario = p.id_usuario
-  LEFT JOIN materia_alumno ma ON ma.id_materia = m.id_materia
+  LEFT JOIN materia_alumno ma ON ma.id_materia = m.id_materia AND ma.activo = TRUE
   LEFT JOIN equipo e ON e.id_materia = m.id_materia
 `
 
@@ -91,9 +91,16 @@ async function crear(req, res) {
     idProfesorFinal = await obtenerIdProfesorPropio(req.user.id_usuario)
   }
 
-  const [semestreRows] = await pool.query('SELECT id_semestre FROM semestre WHERE id_semestre = ?', [id_semestre])
+  const [semestreRows] = await pool.query('SELECT id_semestre, clave, activo FROM semestre WHERE id_semestre = ?', [
+    id_semestre,
+  ])
   if (semestreRows.length === 0) {
     return res.status(400).json({ error: 'El semestre indicado no existe' })
+  }
+  if (!semestreRows[0].activo) {
+    return res
+      .status(422)
+      .json({ error: `El semestre ${semestreRows[0].clave} está inactivo: no se pueden crear materias en él` })
   }
 
   const [duplicado] = await pool.query('SELECT id_materia FROM materia WHERE clave = ? AND id_semestre = ?', [
@@ -133,7 +140,10 @@ async function actualizar(req, res) {
   const { id } = req.params
   const { clave, nombre, grupo, id_semestre, estatus, id_profesor } = req.body
 
-  const [materiaRows] = await pool.query('SELECT id_materia, id_profesor FROM materia WHERE id_materia = ?', [id])
+  const [materiaRows] = await pool.query(
+    'SELECT id_materia, id_profesor, id_semestre FROM materia WHERE id_materia = ?',
+    [id]
+  )
   const materia = materiaRows[0]
 
   if (!materia) {
@@ -156,9 +166,18 @@ async function actualizar(req, res) {
     idProfesorFinal = id_profesor
   }
 
-  const [semestreRows] = await pool.query('SELECT id_semestre FROM semestre WHERE id_semestre = ?', [id_semestre])
+  const [semestreRows] = await pool.query('SELECT id_semestre, clave, activo FROM semestre WHERE id_semestre = ?', [
+    id_semestre,
+  ])
   if (semestreRows.length === 0) {
     return res.status(400).json({ error: 'El semestre indicado no existe' })
+  }
+  // Una materia que ya vive en un semestre hoy inactivo se puede seguir editando; lo que no
+  // se permite es MOVERLA a un semestre inactivo (equivale a darla de alta en él).
+  if (!semestreRows[0].activo && Number(id_semestre) !== materia.id_semestre) {
+    return res
+      .status(422)
+      .json({ error: `El semestre ${semestreRows[0].clave} está inactivo: no se pueden mover materias a él` })
   }
 
   const [duplicado] = await pool.query(

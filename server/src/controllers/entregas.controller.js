@@ -39,7 +39,8 @@ function tipoEquipoParaActividad(tipoActividad) {
 async function obtenerActividadConMateria(idActividad) {
   const [rows] = await pool.query(
     `SELECT act.id_actividad, act.id_materia, act.id_equipo, act.todos_los_equipos, act.entrega_por_equipo,
-            act.titulo, act.tipo, act.fecha_limite, act.programada, act.fecha_publicacion, act.activo,
+            act.titulo, act.tipo, act.tipo_evaluacion, act.fecha_limite, act.programada, act.fecha_publicacion,
+            act.activo,
             m.id_profesor
      FROM actividad act
      JOIN materia m ON m.id_materia = act.id_materia
@@ -149,7 +150,7 @@ async function listarPorActividad(req, res) {
   } else {
     miIdAlumno = await obtenerIdAlumnoPropio(req.user.id_usuario)
 
-    const [inscrito] = await pool.query('SELECT 1 FROM materia_alumno WHERE id_materia = ? AND id_alumno = ? LIMIT 1', [
+    const [inscrito] = await pool.query('SELECT 1 FROM materia_alumno WHERE id_materia = ? AND id_alumno = ? AND activo = TRUE LIMIT 1', [
       actividad.id_materia,
       miIdAlumno,
     ])
@@ -221,6 +222,7 @@ async function listarPorActividad(req, res) {
       id_actividad: actividad.id_actividad,
       titulo: actividad.titulo,
       tipo: actividad.tipo,
+      tipo_evaluacion: actividad.tipo_evaluacion,
       fecha_limite: actividad.fecha_limite,
       entrega_por_equipo: !!actividad.entrega_por_equipo,
     },
@@ -296,7 +298,7 @@ async function crear(req, res) {
     return res.status(404).json({ error: 'Actividad no encontrada' })
   }
 
-  const [inscrito] = await pool.query('SELECT 1 FROM materia_alumno WHERE id_materia = ? AND id_alumno = ? LIMIT 1', [
+  const [inscrito] = await pool.query('SELECT 1 FROM materia_alumno WHERE id_materia = ? AND id_alumno = ? AND activo = TRUE LIMIT 1', [
     actividad.id_materia,
     idAlumno,
   ])

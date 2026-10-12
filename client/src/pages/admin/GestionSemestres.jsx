@@ -1,15 +1,17 @@
 // Pantalla adicional — Gestión de Semestres (no es una de las 19 oficiales)
 // Rol: Administrador
 // URL: /admin/semestres
-// Descripción: Alta y edición de períodos académicos (ej. 2026/1). Toda materia
-// requiere un semestre existente, así que esta pantalla es el punto de partida
-// del flujo semestre -> materia -> equipo.
+// Descripción: Alta, edición y baja lógica de períodos académicos (ej. 2026/1). Toda
+// materia requiere un semestre existente y activo, así que esta pantalla es el punto de
+// partida del flujo semestre -> materia -> equipo. La baja (desactivar) pide confirmación;
+// un semestre inactivo se reactiva desde su formulario de edición.
 
 import { useEffect, useState } from 'react'
 import { Plus, CalendarRange, Loader2 } from 'lucide-react'
 import PageWrapper from '../../components/layout/PageWrapper'
 import Badge from '../../components/ui/Badge'
 import ActionButtons from '../../components/ui/ActionButtons'
+import ConfirmDialog from '../../components/ui/ConfirmDialog'
 import EmptyState from '../../components/ui/EmptyState'
 import * as semestresService from '../../services/semestres.service'
 
@@ -42,7 +44,7 @@ function SemestreForm({ inicial, onCancel, onSaved }) {
           clave,
           fecha_inicio: fechaInicio,
           fecha_fin: fechaFin,
-          activo,
+          activo: Boolean(activo),
         })
       } else {
         await semestresService.crearSemestre({ clave, fecha_inicio: fechaInicio, fecha_fin: fechaFin })
@@ -101,10 +103,12 @@ function SemestreForm({ inicial, onCancel, onSaved }) {
           </div>
         </div>
 
-        {esEdicion && (
+        {/* Desactivar es una baja y va por el botón de la lista, con confirmación; aquí
+            solo se ofrece reactivar un semestre que ya está inactivo. */}
+        {esEdicion && !inicial.activo && (
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, marginBottom: 16 }}>
-            <input type="checkbox" checked={activo} onChange={(e) => setActivo(e.target.checked)} />
-            Semestre activo
+            <input type="checkbox" checked={Boolean(activo)} onChange={(e) => setActivo(e.target.checked)} />
+            Reactivar este semestre (volverá a admitir materias nuevas)
           </label>
         )}
 
@@ -132,6 +136,20 @@ export default function GestionSemestres() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [formSemestre, setFormSemestre] = useState(null) // null = oculto, {} = crear, {...} = editar
+  const [semestreADesactivar, setSemestreADesactivar] = useState(null)
+
+  async function handleConfirmarDesactivar() {
+    const s = semestreADesactivar
+    await semestresService.actualizarSemestre(s.id_semestre, {
+      clave: s.clave,
+      fecha_inicio: s.fecha_inicio,
+      fecha_fin: s.fecha_fin,
+      activo: false,
+    })
+    setSemestreADesactivar(null)
+    setFormSemestre(null)
+    cargar()
+  }
 
   async function cargar() {
     setLoading(true)
@@ -204,7 +222,10 @@ export default function GestionSemestres() {
                       <Badge variant={s.activo ? 'green' : 'gray'}>{s.activo ? 'Activo' : 'Inactivo'}</Badge>
                     </td>
                     <td>
-                      <ActionButtons onEdit={() => setFormSemestre(s)} />
+                      <ActionButtons
+                        onEdit={() => setFormSemestre(s)}
+                        onDelete={s.activo ? () => setSemestreADesactivar(s) : undefined}
+                      />
                     </td>
                   </tr>
                 ))}
@@ -213,6 +234,20 @@ export default function GestionSemestres() {
           )}
         </div>
       </div>
+
+      {semestreADesactivar && (
+        <ConfirmDialog
+          titulo="Desactivar semestre"
+          textoConfirmar="Desactivar"
+          mensajeError="No se pudo desactivar el semestre"
+          onCancelar={() => setSemestreADesactivar(null)}
+          onConfirmar={handleConfirmarDesactivar}
+        >
+          El semestre <strong>{semestreADesactivar.clave}</strong> quedará inactivo: ya no se podrán crear materias
+          en él. Las materias, equipos y calificaciones que ya tiene se conservan y siguen disponibles. Puedes
+          reactivarlo después desde «Editar».
+        </ConfirmDialog>
+      )}
     </PageWrapper>
   )
 }

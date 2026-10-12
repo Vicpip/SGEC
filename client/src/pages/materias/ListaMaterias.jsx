@@ -9,6 +9,7 @@ import { Search, Plus, BookOpen, Loader2 } from 'lucide-react'
 import PageWrapper from '../../components/layout/PageWrapper'
 import Badge from '../../components/ui/Badge'
 import ActionButtons from '../../components/ui/ActionButtons'
+import ConfirmDialog from '../../components/ui/ConfirmDialog'
 import EmptyState from '../../components/ui/EmptyState'
 import { useAuth } from '../../context/AuthContext'
 import * as materiasService from '../../services/materias.service'
@@ -188,6 +189,7 @@ export default function ListaMaterias() {
   const [busqueda, setBusqueda] = useState('')
   const [filtroSemestre, setFiltroSemestre] = useState('todos')
   const [formMateria, setFormMateria] = useState(null) // null = oculto, {} = crear, {...} = editar
+  const [materiaACerrar, setMateriaACerrar] = useState(null)
 
   async function cargar() {
     setLoading(true)
@@ -220,13 +222,10 @@ export default function ListaMaterias() {
     cargar()
   }
 
-  async function handleDesactivar(materia) {
-    try {
-      await materiasService.desactivarMateria(materia.id_materia)
-      cargar()
-    } catch (err) {
-      setError(err.response?.data?.error || 'No se pudo cerrar la materia')
-    }
+  async function handleConfirmarCerrar() {
+    await materiasService.desactivarMateria(materiaACerrar.id_materia)
+    setMateriaACerrar(null)
+    cargar()
   }
 
   const materiasFiltradas = useMemo(() => {
@@ -325,7 +324,7 @@ export default function ListaMaterias() {
                     <td>
                       <ActionButtons
                         onEdit={() => setFormMateria(m)}
-                        onDelete={m.estatus !== 'Cerrada' ? () => handleDesactivar(m) : undefined}
+                        onDelete={m.estatus !== 'Cerrada' ? () => setMateriaACerrar(m) : undefined}
                       />
                     </td>
                   </tr>
@@ -335,6 +334,24 @@ export default function ListaMaterias() {
           )}
         </div>
       </div>
+
+      {materiaACerrar && (
+        <ConfirmDialog
+          titulo="Cerrar materia"
+          textoConfirmar="Cerrar materia"
+          mensajeError="No se pudo cerrar la materia"
+          onCancelar={() => setMateriaACerrar(null)}
+          onConfirmar={handleConfirmarCerrar}
+        >
+          La materia{' '}
+          <strong>
+            {materiaACerrar.clave} — {materiaACerrar.nombre} · {materiaACerrar.grupo}
+          </strong>{' '}
+          quedará con estatus «Cerrada»: sus alumnos dejarán de recibir tus avisos generales y ya no podrás
+          restablecer su acceso por esta materia. Sus equipos, actividades y calificaciones se conservan. Puedes
+          reabrirla después cambiando su estatus desde «Editar».
+        </ConfirmDialog>
+      )}
     </PageWrapper>
   )
 }

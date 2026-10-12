@@ -132,10 +132,10 @@ Ver DDL completo en `server/db/schema.sql`.
 | `alumno` | Extiende `usuario`: boleta, grupo, carrera (`carrera` es nullable — puede venir vacía en importación Excel) |
 | `semestre` | Período académico (ej. 2026/1) |
 | `materia` | Unidad de aprendizaje por semestre y profesor. Borrado lógico vía `estatus ENUM('Activa','En curso','Cerrada')` — ya NO tiene campo `activo` |
-| `materia_alumno` | Inscripción alumno–materia |
+| `materia_alumno` | Inscripción alumno–materia. Baja lógica con `activo` (FALSE = dado de baja de esa materia; reinscribir reactiva la misma fila). Toda consulta de "está inscrito" exige `activo = TRUE` |
 | `equipo` | Grupo colaborativo por tipo de actividad |
 | `equipo_alumno` | Integrantes del equipo |
-| `actividad` | En clase/práctica/tarea/proyecto publicado por el profesor. `id_equipo` (nullable) y `todos_los_equipos` definen a qué equipo(s) se dirige. `entrega_por_equipo BOOLEAN DEFAULT FALSE` — si TRUE, una entrega de cualquier integrante marca la actividad como completada para todo el equipo |
+| `actividad` | En clase/práctica/tarea/proyecto publicado por el profesor. `id_equipo` (nullable) y `todos_los_equipos` definen a qué equipo(s) se dirige. `entrega_por_equipo BOOLEAN DEFAULT FALSE` — si TRUE, una entrega de cualquier integrante marca la actividad como completada para todo el equipo. `tipo_evaluacion VARCHAR(60) NULL` — tipo de actividad a evaluar (Ejercicio, Mapa mental, Cuestionario…), texto libre que no altera el ENUM `tipo` |
 | `archivo_actividad` | Archivos adjuntos del profesor a la actividad |
 | `entrega` | Entrega del alumno por actividad |
 | `archivo_entrega` | Archivos adjuntos de la entrega del alumno |
@@ -282,7 +282,7 @@ repo). El resumen de cada una vive en `docs/cierre/S<N>.md`.
 | Sesión | Tema | Estado | Commit |
 |--------|------|--------|--------|
 | S13 | Adjuntos y acceso de alumnos | ✅ Completa | 9dfcbf5 |
-| S14 | ABC completo y tipo de evaluación | ⏳ Pendiente | — |
+| S14 | ABC completo y tipo de evaluación | ✅ Completa | PENDIENTE_HASH |
 | S15 | Equipos espejo, reporte y panel del alumno | ⏳ Pendiente | — |
 | S16 | Hardening de producción | ⏳ Pendiente | — |
 | S17 | Cierre documental | ⏳ Pendiente | — |
@@ -290,9 +290,11 @@ repo). El resumen de cada una vive en `docs/cierre/S<N>.md`.
 **Pendientes transversales:** los dos que dejó S12 quedaron resueltos en S13 —
 `email.service.js` ya envía por SMTP con nodemailer (opcional: solo si hay variables `SMTP_*`;
 las credenciales reales se configuran en el `.env` del servidor) y los adjuntos se descargan por
-`GET /api/archivos/:tipo/:id`. Lo que sigue abierto es el resto del plan de cierre (S14–S17).
-La migración `002` (`usuario.debe_cambiar_contrasena`) debe aplicarse en toda base existente
-antes de desplegar el código de S13 (ver `docs/DEPLOYMENT.md`).
+`GET /api/archivos/:tipo/:id`. Lo que sigue abierto es el resto del plan de cierre (S15–S17). Las migraciones `002`
+(`usuario.debe_cambiar_contrasena`, S13) y `003` (`actividad.tipo_evaluacion` y
+`materia_alumno.activo`, S14) deben aplicarse, en ese orden, en toda base existente antes de
+desplegar el código (ver `docs/DEPLOYMENT.md`). Limitaciones confirmadas en S14:
+`docs/LIMITACIONES.md`.
 
 Documentación técnica completa en `docs/`: `ARQUITECTURA.md`, `API.md`, `SECURITY.md`,
 `DEPLOYMENT.md`.

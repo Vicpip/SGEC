@@ -1,12 +1,14 @@
 // Pantalla 07 — Lista de Alumnos del Grupo
 // Rol: Profesor
 // URL: /alumnos?materia=:clave
-// Descripción: Lista de alumnos inscritos en la materia/grupo.
+// Descripción: Lista de alumnos inscritos en la materia/grupo, con alta manual, edición de
+// datos (el correo institucional no se edita) y baja de la materia (lógica, con confirmación).
 
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import * as XLSX from 'xlsx'
 import { Search, Upload, Users, Loader2, FileDown, UserPlus, X, KeyRound } from 'lucide-react'
+import ConfirmDialog from '../../components/ui/ConfirmDialog'
 import PageWrapper from '../../components/layout/PageWrapper'
 import Badge from '../../components/ui/Badge'
 import ActionButtons from '../../components/ui/ActionButtons'
@@ -15,10 +17,22 @@ import CredencialesTemporales from '../../components/ui/CredencialesTemporales'
 import * as alumnosService from '../../services/alumnos.service'
 import * as materiasService from '../../services/materias.service'
 
-const PLANTILLA_ENCABEZADOS = ['boleta', 'nombre', 'apellido_paterno', 'apellido_materno', 'grupo', 'correo_institucional']
-const PLANTILLA_EJEMPLO = ['2020630001', 'Juan', 'Pérez', 'López', '4CM1', 'jperez@alumno.ipn.mx']
+const PLANTILLA_ENCABEZADOS = ['boleta', 'nombre', 'apellido_paterno', 'apellido_materno', 'grupo', 'correo_institucional', 'carrera']
+const PLANTILLA_EJEMPLO = ['2020630001', 'Juan', 'Pérez', 'López', '4CM1', 'jperez@alumno.ipn.mx', 'Ingeniería en Sistemas Computacionales']
 
-const FORM_INICIAL = { boleta: '', nombre: '', apellido_paterno: '', apellido_materno: '', grupo: '', correo: '' }
+const FORM_INICIAL = { boleta: '', nombre: '', apellido_paterno: '', apellido_materno: '', grupo: '', correo: '', carrera: '' }
+
+function formDesdeAlumno(alumno) {
+  return {
+    boleta: alumno.boleta ?? '',
+    nombre: alumno.nombre ?? '',
+    apellido_paterno: alumno.apellido_paterno ?? '',
+    apellido_materno: alumno.apellido_materno ?? '',
+    grupo: alumno.grupo ?? '',
+    correo: alumno.correo_institucional ?? '',
+    carrera: alumno.carrera ?? '',
+  }
+}
 
 function descargarPlantilla() {
   const hoja = XLSX.utils.aoa_to_sheet([PLANTILLA_ENCABEZADOS, PLANTILLA_EJEMPLO])
@@ -27,8 +41,11 @@ function descargarPlantilla() {
   XLSX.writeFile(libro, 'plantilla_alumnos.xlsx')
 }
 
-function NuevoAlumnoModal({ claveMateria, onClose, onCreado }) {
-  const [form, setForm] = useState(FORM_INICIAL)
+// Alta manual (sin `alumno`) o edición de datos (con `alumno`). En edición el correo
+// institucional se muestra bloqueado: es la identidad de la cuenta y no se puede cambiar.
+function AlumnoModal({ claveMateria, alumno, onClose, onCreado, onEditado }) {
+  const esEdicion = Boolean(alumno)
+  const [form, setForm] = useState(esEdicion ? formDesdeAlumno(alumno) : FORM_INICIAL)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -45,20 +62,31 @@ function NuevoAlumnoModal({ claveMateria, onClose, onCreado }) {
       return
     }
 
+    const datos = {
+      boleta: form.boleta.trim(),
+      nombre: form.nombre.trim(),
+      apellido_paterno: form.apellido_paterno.trim(),
+      apellido_materno: form.apellido_materno.trim() || undefined,
+      grupo: form.grupo.trim(),
+      carrera: form.carrera.trim() || undefined,
+    }
+
     setLoading(true)
     try {
-      const data = await alumnosService.crearAlumno(claveMateria, {
-        boleta: form.boleta.trim(),
-        nombre: form.nombre.trim(),
-        apellido_paterno: form.apellido_paterno.trim(),
-        apellido_materno: form.apellido_materno.trim() || undefined,
-        grupo: form.grupo.trim(),
-        correo: form.correo.trim(),
-      })
-      onCreado(data.credenciales ?? [])
+      if (esEdicion) {
+        await alumnosService.actualizarAlumno(alumno.id_alumno, datos)
+        onEditado()
+      } else {
+        const data = await alumnosService.crearAlumno(claveMateria, { ...datos, correo: form.correo.trim() })
+        onCreado(data.credenciales ?? [])
+      }
     } catch (err) {
       const detalle = err.response?.data?.errores?.[0]
-      setError(detalle || err.response?.data?.error || 'No se pudo dar de alta al alumno')
+      setError(
+        detalle ||
+          err.response?.data?.error ||
+          (esEdicion ? 'No se pudieron guardar los cambios' : 'No se pudo dar de alta al alumno')
+      )
     } finally {
       setLoading(false)
     }
@@ -68,7 +96,7 @@ function NuevoAlumnoModal({ claveMateria, onClose, onCreado }) {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="card-header">
-          <span className="card-title">Nuevo alumno</span>
+          <span className="card-title">{esEdicion ? 'Editar alumno' : 'Nuevo alumno'}</span>
           <button type="button" className="modal-close" onClick={onClose} aria-label="Cerrar">
             <X className="icon-sm" />
           </button>
@@ -151,10 +179,31 @@ function NuevoAlumnoModal({ claveMateria, onClose, onCreado }) {
                   className="form-control"
                   placeholder="alumno@alumno.ipn.mx"
                   value={form.correo}
+                  disabled={esEdicion}
+                  title={esEdicion ? 'El correo institucional no se puede editar' : undefined}
                   onChange={(e) => actualizarCampo('correo', e.target.value)}
                 />
               </div>
             </div>
+            <div className="form-group">
+              <label className="form-label" htmlFor="alumno-carrera">
+                Carrera <span style={{ fontWeight: 400, color: 'var(--gray-400)' }}>(opcional)</span>
+              </label>
+              <input
+                id="alumno-carrera"
+                className="form-control"
+                placeholder="Ingeniería en Sistemas Computacionales"
+                maxLength={100}
+                value={form.carrera}
+                onChange={(e) => actualizarCampo('carrera', e.target.value)}
+              />
+            </div>
+            {esEdicion && (
+              <div className="text-xs">
+                El correo institucional no se puede editar. Los cambios se aplican a la cuenta del alumno, así que
+                también los verán sus otros profesores.
+              </div>
+            )}
           </div>
           <div className="card-header" style={{ borderTop: '1px solid var(--gray-100)', borderBottom: 'none' }}>
             <div className="form-actions" style={{ width: '100%' }}>
@@ -162,7 +211,7 @@ function NuevoAlumnoModal({ claveMateria, onClose, onCreado }) {
                 Cancelar
               </button>
               <button type="submit" className="btn btn-primary" disabled={loading}>
-                {loading ? <Loader2 className="icon-sm spin" /> : 'Dar de alta'}
+                {loading ? <Loader2 className="icon-sm spin" /> : esEdicion ? 'Guardar cambios' : 'Dar de alta'}
               </button>
             </div>
           </div>
@@ -264,6 +313,8 @@ export default function ListaAlumnos() {
   const [busqueda, setBusqueda] = useState('')
   const [modalAbierto, setModalAbierto] = useState(false)
   const [alumnoARestablecer, setAlumnoARestablecer] = useState(null)
+  const [alumnoAEditar, setAlumnoAEditar] = useState(null)
+  const [alumnoABaja, setAlumnoABaja] = useState(null)
   // { titulo, lista } mientras se muestran contraseñas temporales recién generadas.
   const [credenciales, setCredenciales] = useState(null)
 
@@ -321,6 +372,17 @@ export default function ListaAlumnos() {
     if (nuevas.length > 0) {
       setCredenciales({ titulo: 'Alumno dado de alta', lista: nuevas })
     }
+    cargarAlumnos()
+  }
+
+  function handleAlumnoEditado() {
+    setAlumnoAEditar(null)
+    cargarAlumnos()
+  }
+
+  async function handleConfirmarBaja() {
+    await alumnosService.darDeBajaAlumno(alumnoABaja.id_alumno, claveMateria)
+    setAlumnoABaja(null)
     cargarAlumnos()
   }
 
@@ -434,12 +496,21 @@ export default function ListaAlumnos() {
                     <td className="text-sm">{al.carrera ?? '—'}</td>
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <ActionButtons onView={() => navigate(`/alumnos/${al.id_alumno}/actividades`)} />
+                        <ActionButtons
+                          onView={() => navigate(`/alumnos/${al.id_alumno}/actividades`)}
+                          onEdit={() => setAlumnoAEditar(al)}
+                          onDelete={() => setAlumnoABaja(al)}
+                        />
                         <button
                           type="button"
                           className="btn btn-secondary btn-sm"
                           onClick={() => setAlumnoARestablecer(al)}
-                          title="Generar una contraseña temporal nueva para este alumno"
+                          disabled={!al.acceso_pendiente}
+                          title={
+                            al.acceso_pendiente
+                              ? 'Generar una contraseña temporal nueva para este alumno'
+                              : 'El alumno ya activó su cuenta: debe usar "Olvidé mi contraseña" o pedir el restablecimiento al Administrador'
+                          }
                         >
                           <KeyRound className="icon-sm" />
                           Restablecer acceso
@@ -455,11 +526,29 @@ export default function ListaAlumnos() {
       </div>
 
       {modalAbierto && (
-        <NuevoAlumnoModal
-          claveMateria={claveMateria}
-          onClose={() => setModalAbierto(false)}
-          onCreado={handleAlumnoCreado}
-        />
+        <AlumnoModal claveMateria={claveMateria} onClose={() => setModalAbierto(false)} onCreado={handleAlumnoCreado} />
+      )}
+
+      {alumnoAEditar && (
+        <AlumnoModal alumno={alumnoAEditar} onClose={() => setAlumnoAEditar(null)} onEditado={handleAlumnoEditado} />
+      )}
+
+      {alumnoABaja && (
+        <ConfirmDialog
+          titulo="Dar de baja de la materia"
+          textoConfirmar="Dar de baja"
+          mensajeError="No se pudo dar de baja al alumno"
+          onCancelar={() => setAlumnoABaja(null)}
+          onConfirmar={handleConfirmarBaja}
+        >
+          <strong>
+            {alumnoABaja.nombre} {alumnoABaja.apellido_paterno}
+          </strong>{' '}
+          ({alumnoABaja.boleta}) dejará de estar inscrito en <strong>{materia?.nombre ?? claveMateria}</strong> y ya no
+          verá sus actividades ni avisos. Su cuenta, sus entregas y sus calificaciones se conservan; puedes volver a
+          inscribirlo después con «Alumno» o importando el Excel. Si pertenece a un equipo activo de esta materia,
+          primero tendrás que editar o desactivar ese equipo.
+        </ConfirmDialog>
       )}
 
       {alumnoARestablecer && (

@@ -32,7 +32,7 @@ async function listarProfesores() {
     FROM usuario u
     JOIN profesor p ON p.id_usuario = u.id_usuario
     LEFT JOIN materia m ON m.id_profesor = p.id_profesor AND m.estatus != 'Cerrada'
-    LEFT JOIN materia_alumno ma ON ma.id_materia = m.id_materia
+    LEFT JOIN materia_alumno ma ON ma.id_materia = m.id_materia AND ma.activo = TRUE
     WHERE u.rol = 'Profesor'
     GROUP BY u.id_usuario, p.id_profesor
     ORDER BY u.apellido_paterno, u.nombre
@@ -198,4 +198,25 @@ async function desactivar(req, res) {
   res.status(200).json({ message: 'Usuario desactivado' })
 }
 
-module.exports = { listar, obtener, crear, actualizar, desactivar }
+// PATCH /api/usuarios/:id/reactivar — revierte la baja lógica de un Profesor. Se limita a
+// ese rol a propósito: es lo único que ofrece Gestión de Profesores, y reactivar cuentas de
+// otros roles por id no tiene pantalla ni caso de uso definido.
+async function reactivar(req, res) {
+  const { id } = req.params
+
+  const [rows] = await pool.query('SELECT id_usuario, rol FROM usuario WHERE id_usuario = ?', [id])
+  const usuario = rows[0]
+
+  if (!usuario) {
+    return res.status(404).json({ error: 'Usuario no encontrado' })
+  }
+
+  if (usuario.rol !== 'Profesor') {
+    return res.status(409).json({ error: 'Solo se pueden reactivar cuentas de profesor' })
+  }
+
+  await pool.query('UPDATE usuario SET activo = TRUE WHERE id_usuario = ?', [id])
+  res.status(200).json({ message: 'Profesor reactivado' })
+}
+
+module.exports = { listar, obtener, crear, actualizar, desactivar, reactivar }

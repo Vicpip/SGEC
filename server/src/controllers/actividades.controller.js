@@ -29,6 +29,50 @@ function tipoEquipoParaActividad(tipoActividad) {
   return 'Tarea'
 }
 
+// Valida a qué equipo(s) se dirige la actividad. Devuelve null si el destino es válido o
+// { status, error } con la respuesta que corresponde.
+async function validarDestino(idMateria, tipo, todosLosEquipos, idEquipo) {
+  const tipoEquipo = tipoEquipoParaActividad(tipo)
+
+  if (todosLosEquipos) {
+    const [equiposRows] = await pool.query('SELECT 1 FROM equipo WHERE id_materia = ? AND tipo = ? AND activo = TRUE LIMIT 1', [
+      idMateria,
+      tipoEquipo,
+    ])
+    if (equiposRows.length === 0) {
+      return { status: 422, error: `La materia no tiene equipos de tipo ${tipoEquipo} para dirigir esta actividad` }
+    }
+    return null
+  }
+
+  if (!idEquipo) {
+    return { status: 400, error: 'id_equipo es requerido cuando todos_los_equipos es false' }
+  }
+
+  const [equipoRows] = await pool.query(
+    'SELECT id_equipo FROM equipo WHERE id_equipo = ? AND id_materia = ? AND tipo = ? AND activo = TRUE',
+    [idEquipo, idMateria, tipoEquipo]
+  )
+  if (equipoRows.length === 0) {
+    return { status: 400, error: 'El equipo indicado no existe en esta materia o no corresponde al tipo de la actividad' }
+  }
+  return null
+}
+
+// Una actividad "ya tiene entregas" cuando algún alumno subió algo (entrega con estatus
+// distinto de 'Pendiente': la fila 'Pendiente' o su ausencia significan que no entregó) o
+// cuando ya hay calificaciones registradas (cubre las actividades En clase, que se
+// califican sin archivo). A partir de ahí su tipo, modalidad de entrega y destino quedan fijos.
+async function tieneEntregasOCalificaciones(idActividad) {
+  const [rows] = await pool.query(
+    `SELECT
+       EXISTS (SELECT 1 FROM entrega WHERE id_actividad = ? AND estatus != 'Pendiente') AS con_entregas,
+       EXISTS (SELECT 1 FROM calificacion WHERE id_actividad = ?) AS con_calificaciones`,
+    [idActividad, idActividad]
+  )
+  return Boolean(rows[0].con_entregas || rows[0].con_calificaciones)
+}
+
 async function archivosDeActividades(idsActividad) {
   if (idsActividad.length === 0) return new Map()
 
@@ -48,12 +92,13 @@ async function archivosDeActividades(idsActividad) {
 
 const SELECT_ALUMNO = `
   SELECT act.id_actividad, act.id_materia, act.id_equipo, act.todos_los_equipos, act.entrega_por_equipo,
-         act.titulo, act.descripcion, act.tipo, act.fecha_limite, act.programada, act.fecha_publicacion,
+         act.titulo, act.descripcion, act.tipo, act.tipo_evaluacion, act.fecha_limite, act.programada,
+         act.fecha_publicacion,
          m.clave AS materia_clave, m.nombre AS materia_nombre, m.grupo AS materia_grupo,
          eq.nombre AS equipo_nombre
   FROM actividad act
   JOIN materia m ON m.id_materia = act.id_materia
-  JOIN materia_alumno ma ON ma.id_materia = m.id_materia AND ma.id_alumno = ?
+  JOIN materia_alumno ma ON ma.id_materia = m.id_materia AND ma.id_alumno = ? AND ma.activo = TRUE
   LEFT JOIN equipo eq ON eq.id_equipo = act.id_equipo
 `
 
@@ -108,7 +153,8 @@ async function listarParaProfesor(req, res) {
 
   const [actividades] = await pool.query(
     `SELECT act.id_actividad, act.id_materia, act.id_equipo, act.todos_los_equipos, act.entrega_por_equipo,
-            act.titulo, act.descripcion, act.tipo, act.fecha_limite, act.programada, act.fecha_publicacion, act.activo,
+            act.titulo, act.descripcion, act.tipo, act.tipo_evaluacion, act.fecha_limite, act.programada,
+            act.fecha_publicacion, act.activo,
             eq.nombre AS equipo_nombre
      FROM actividad act
      LEFT JOIN equipo eq ON eq.id_equipo = act.id_equipo
@@ -141,7 +187,8 @@ async function obtener(req, res) {
 
   const [rows] = await pool.query(
     `SELECT act.id_actividad, act.id_materia, act.id_equipo, act.todos_los_equipos, act.entrega_por_equipo,
-            act.titulo, act.descripcion, act.tipo, act.fecha_limite, act.programada, act.fecha_publicacion, act.activo,
+            act.titulo, act.descripcion, act.tipo, act.tipo_evaluacion, act.fecha_limite, act.programada,
+            act.fecha_publicacion, act.activo,
             m.id_profesor, m.clave AS materia_clave, m.nombre AS materia_nombre, m.grupo AS materia_grupo,
             eq.nombre AS equipo_nombre
      FROM actividad act
@@ -156,15 +203,20 @@ async function obtener(req, res) {
     return res.status(404).json({ error: 'Actividad no encontrada' })
   }
 
+  // Solo para el profesor: indica al formulario de edición si tipo, modalidad de entrega y
+  // destino ya quedaron fijos (el servidor lo vuelve a validar al guardar).
+  let extraProfesor = {}
+
   if (req.user.rol === 'Profesor') {
     const idProfesor = await obtenerIdProfesorPropio(req.user.id_usuario)
     if (actividad.id_profesor !== idProfesor) {
       return res.status(403).json({ error: 'No tienes permiso para ver esta actividad' })
     }
+    extraProfesor = { tiene_entregas: await tieneEntregasOCalificaciones(id) }
   } else {
     const idAlumno = await obtenerIdAlumnoPropio(req.user.id_usuario)
 
-    const [inscrito] = await pool.query('SELECT 1 FROM materia_alumno WHERE id_materia = ? AND id_alumno = ? LIMIT 1', [
+    const [inscrito] = await pool.query('SELECT 1 FROM materia_alumno WHERE id_materia = ? AND id_alumno = ? AND activo = TRUE LIMIT 1', [
       actividad.id_materia,
       idAlumno,
     ])
@@ -194,7 +246,7 @@ async function obtener(req, res) {
     [id]
   )
 
-  res.status(200).json({ actividad: { ...actividad, archivos } })
+  res.status(200).json({ actividad: { ...actividad, ...extraProfesor, archivos } })
 }
 
 async function crear(req, res) {
@@ -206,6 +258,7 @@ async function crear(req, res) {
     titulo,
     descripcion,
     tipo,
+    tipo_evaluacion,
     fecha_limite,
     programada,
     fecha_publicacion,
@@ -228,34 +281,10 @@ async function crear(req, res) {
     return res.status(404).json({ error: 'Materia no encontrada' })
   }
 
-  const tipoEquipo = tipoEquipoParaActividad(tipo)
-
-  if (todos_los_equipos) {
-    const [equiposRows] = await pool.query('SELECT 1 FROM equipo WHERE id_materia = ? AND tipo = ? AND activo = TRUE LIMIT 1', [
-      id_materia,
-      tipoEquipo,
-    ])
-    if (equiposRows.length === 0) {
-      limpiarArchivosSubidos()
-      return res
-        .status(422)
-        .json({ error: `La materia no tiene equipos de tipo ${tipoEquipo} para dirigir esta actividad` })
-    }
-  } else {
-    if (!id_equipo) {
-      limpiarArchivosSubidos()
-      return res.status(400).json({ error: 'id_equipo es requerido cuando todos_los_equipos es false' })
-    }
-    const [equipoRows] = await pool.query(
-      'SELECT id_equipo FROM equipo WHERE id_equipo = ? AND id_materia = ? AND tipo = ? AND activo = TRUE',
-      [id_equipo, id_materia, tipoEquipo]
-    )
-    if (equipoRows.length === 0) {
-      limpiarArchivosSubidos()
-      return res
-        .status(400)
-        .json({ error: 'El equipo indicado no existe en esta materia o no corresponde al tipo de la actividad' })
-    }
+  const destinoInvalido = await validarDestino(id_materia, tipo, todos_los_equipos, id_equipo)
+  if (destinoInvalido) {
+    limpiarArchivosSubidos()
+    return res.status(destinoInvalido.status).json({ error: destinoInvalido.error })
   }
 
   if (programada && !fecha_publicacion) {
@@ -265,14 +294,16 @@ async function crear(req, res) {
 
   const idEquipoFinal = todos_los_equipos ? null : id_equipo
   const fechaPublicacionFinal = programada ? fecha_publicacion : null
+  const tipoEvaluacionFinal = tipo_evaluacion || null
 
   const conexion = await pool.getConnection()
   try {
     await conexion.beginTransaction()
     const [result] = await conexion.query(
       `INSERT INTO actividad
-         (id_materia, id_equipo, todos_los_equipos, entrega_por_equipo, titulo, descripcion, tipo, fecha_limite, programada, fecha_publicacion)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (id_materia, id_equipo, todos_los_equipos, entrega_por_equipo, titulo, descripcion, tipo, tipo_evaluacion,
+          fecha_limite, programada, fecha_publicacion)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id_materia,
         idEquipoFinal,
@@ -281,6 +312,7 @@ async function crear(req, res) {
         titulo,
         descripcion || null,
         tipo,
+        tipoEvaluacionFinal,
         fecha_limite,
         !!programada,
         fechaPublicacionFinal,
@@ -307,6 +339,7 @@ async function crear(req, res) {
         titulo,
         descripcion: descripcion || null,
         tipo,
+        tipo_evaluacion: tipoEvaluacionFinal,
         fecha_limite,
         programada: !!programada,
         fecha_publicacion: fechaPublicacionFinal,
@@ -321,12 +354,21 @@ async function crear(req, res) {
   }
 }
 
+// PUT /api/actividades/:id
+// Título, descripción, tipo de evaluación, fecha límite y publicación programada se pueden
+// editar siempre. El tipo, la modalidad de entrega (entrega_por_equipo) y el destino
+// (todos_los_equipos / id_equipo) son opcionales: si no vienen se conservan; si vienen con un
+// valor distinto y la actividad ya tiene entregas o calificaciones, se responde 409 — las
+// entregas quedaron ligadas a un equipo y a una modalidad, y cambiarlos las dejaría huérfanas.
+// Los archivos adjuntos no se editan por este endpoint.
 async function actualizar(req, res) {
   const { id } = req.params
-  const { titulo, descripcion, fecha_limite, programada, fecha_publicacion, entrega_por_equipo } = req.body
+  const { titulo, descripcion, tipo_evaluacion, fecha_limite, programada, fecha_publicacion } = req.body
 
   const [actividadRows] = await pool.query(
-    `SELECT act.id_actividad, m.id_profesor FROM actividad act JOIN materia m ON m.id_materia = act.id_materia WHERE act.id_actividad = ?`,
+    `SELECT act.id_actividad, act.id_materia, act.id_equipo, act.todos_los_equipos, act.entrega_por_equipo,
+            act.tipo, act.activo, m.id_profesor
+     FROM actividad act JOIN materia m ON m.id_materia = act.id_materia WHERE act.id_actividad = ?`,
     [id]
   )
   const actividad = actividadRows[0]
@@ -340,15 +382,59 @@ async function actualizar(req, res) {
     return res.status(403).json({ error: 'No tienes permiso para editar esta actividad' })
   }
 
+  if (!actividad.activo) {
+    return res.status(409).json({ error: 'La actividad está desactivada y no puede editarse' })
+  }
+
   if (programada && !fecha_publicacion) {
     return res.status(400).json({ error: 'fecha_publicacion es requerida cuando programada es true' })
   }
 
+  const tipoFinal = req.body.tipo ?? actividad.tipo
+  const entregaPorEquipoFinal = req.body.entrega_por_equipo ?? Boolean(actividad.entrega_por_equipo)
+  const todosFinal = req.body.todos_los_equipos ?? Boolean(actividad.todos_los_equipos)
+  // Al pasar a "todos los equipos" el equipo específico deja de aplicar.
+  const idEquipoFinal = todosFinal ? null : (req.body.id_equipo ?? actividad.id_equipo)
+
+  const cambiaEstructura =
+    tipoFinal !== actividad.tipo ||
+    entregaPorEquipoFinal !== Boolean(actividad.entrega_por_equipo) ||
+    todosFinal !== Boolean(actividad.todos_los_equipos) ||
+    (idEquipoFinal ?? null) !== (actividad.id_equipo ?? null)
+
+  if (cambiaEstructura) {
+    if (await tieneEntregasOCalificaciones(id)) {
+      return res.status(409).json({
+        error:
+          'La actividad ya tiene entregas o calificaciones: no se puede cambiar su tipo, la modalidad de entrega ni el equipo al que va dirigida',
+        codigo: 'ACTIVIDAD_CON_ENTREGAS',
+      })
+    }
+
+    const destinoInvalido = await validarDestino(actividad.id_materia, tipoFinal, todosFinal, idEquipoFinal)
+    if (destinoInvalido) {
+      return res.status(destinoInvalido.status).json({ error: destinoInvalido.error })
+    }
+  }
+
   await pool.query(
     `UPDATE actividad
-     SET titulo = ?, descripcion = ?, fecha_limite = ?, programada = ?, fecha_publicacion = ?, entrega_por_equipo = ?
+     SET titulo = ?, descripcion = ?, tipo_evaluacion = ?, fecha_limite = ?, programada = ?, fecha_publicacion = ?,
+         tipo = ?, entrega_por_equipo = ?, todos_los_equipos = ?, id_equipo = ?
      WHERE id_actividad = ?`,
-    [titulo, descripcion || null, fecha_limite, !!programada, programada ? fecha_publicacion : null, !!entrega_por_equipo, id]
+    [
+      titulo,
+      descripcion || null,
+      tipo_evaluacion || null,
+      fecha_limite,
+      !!programada,
+      programada ? fecha_publicacion : null,
+      tipoFinal,
+      entregaPorEquipoFinal,
+      todosFinal,
+      idEquipoFinal,
+      id,
+    ]
   )
 
   res.status(200).json({ message: 'Actividad actualizada' })
