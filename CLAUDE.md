@@ -288,7 +288,7 @@ repo). El resumen de cada una vive en `docs/cierre/S<N>.md`.
 | S13 | Adjuntos y acceso de alumnos | ✅ Completa | 9dfcbf5 |
 | S14 | ABC completo y tipo de evaluación | ✅ Completa | 91c096d |
 | S15 | Equipos espejo, reporte y panel del alumno | ✅ Completa | 08a032d |
-| S16 | Hardening de producción | ✅ Completa | HASH_S16 |
+| S16 | Hardening de producción | ✅ Completa | 7d6a40f |
 | S17 | Cierre documental | ⏳ Pendiente | — |
 
 **Pendientes transversales:** los dos que dejó S12 quedaron resueltos en S13 —
