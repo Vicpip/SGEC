@@ -9,6 +9,10 @@
 // devuelve el indicador y lo incluye en el JWT; mientras esté presente, auth.middleware.js
 // solo deja pasar /api/auth/*. Al cambiar la contraseña (change-password o el enlace de
 // reset-password) el indicador vuelve a FALSE y change-password entrega un token nuevo.
+//
+// Invalidación de sesiones (Sesión 16): todo cambio de contraseña anota el momento en
+// usuario.contrasena_cambiada_en, y auth.middleware.js rechaza (401) los tokens emitidos
+// antes. Así, quien tuviera una sesión abierta con la contraseña anterior la pierde.
 
 const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken')
@@ -24,6 +28,7 @@ const {
   RESET_TOKEN_VIGENCIA_MS,
   generarTokenReset,
   hashTokenReset,
+  ahoraSinMilisegundos,
 } = require('../utils/credenciales')
 
 const env = validateEnv()
@@ -170,9 +175,10 @@ async function resetPassword(req, res) {
   const nuevoHash = await bcrypt.hash(nueva_contrasena, RONDAS_BCRYPT)
   await pool.query(
     `UPDATE usuario
-     SET contrasena_hash = ?, reset_token_hash = NULL, reset_token_expira = NULL, debe_cambiar_contrasena = FALSE
+     SET contrasena_hash = ?, reset_token_hash = NULL, reset_token_expira = NULL, debe_cambiar_contrasena = FALSE,
+         contrasena_cambiada_en = ?
      WHERE id_usuario = ?`,
-    [nuevoHash, usuario.id_usuario]
+    [nuevoHash, ahoraSinMilisegundos(), usuario.id_usuario]
   )
 
   res.status(200).json({ message: 'Contraseña actualizada correctamente' })
@@ -203,13 +209,15 @@ async function changePassword(req, res) {
   const nuevoHash = await bcrypt.hash(nueva_contrasena, RONDAS_BCRYPT)
   await pool.query(
     `UPDATE usuario
-     SET contrasena_hash = ?, debe_cambiar_contrasena = FALSE, reset_token_hash = NULL, reset_token_expira = NULL
+     SET contrasena_hash = ?, debe_cambiar_contrasena = FALSE, reset_token_hash = NULL, reset_token_expira = NULL,
+         contrasena_cambiada_en = ?
      WHERE id_usuario = ?`,
-    [nuevoHash, req.user.id_usuario]
+    [nuevoHash, ahoraSinMilisegundos(), req.user.id_usuario]
   )
 
-  // Token nuevo sin el indicador de cambio obligatorio: el que traía el cliente lo lleva
-  // en el payload y seguiría bloqueado por auth.middleware.js hasta expirar.
+  // Token nuevo, emitido DESPUÉS de anotar el cambio: el que traía el cliente acaba de
+  // quedar invalidado (es anterior a contrasena_cambiada_en) y además puede llevar el
+  // indicador de cambio obligatorio en el payload.
   const { token } = firmarToken(usuario, false)
 
   res.status(200).json({ message: 'Contraseña actualizada correctamente', token, debe_cambiar_contrasena: false })

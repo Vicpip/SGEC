@@ -16,6 +16,25 @@ const REQUIRED_VARS = [
 const JWT_SECRET_PLACEHOLDER = 'cambia_este_secreto_en_produccion'
 const JWT_SECRET_MIN_LENGTH = 32
 
+// TRUST_PROXY: cuántos proxies inversos hay entre el cliente y Node. Express lo usa para
+// decidir de dónde saca req.ip (y con ella cuentan los límites de peticiones). En producción
+// hay exactamente uno (el Nginx del host), de ahí el valor por defecto 1: req.ip es la última
+// dirección de X-Forwarded-For, la que agrega ese Nginx, y no una que el cliente pueda falsear.
+//   - "0" o "false": sin proxy (Node expuesto directamente); se ignora X-Forwarded-For.
+//   - un número: cantidad de saltos de proxy.
+//   - cualquier otro texto: lista de IPs/subredes de confianza, tal cual la entiende Express.
+// "true" se rechaza: confiaría en cualquier X-Forwarded-For y dejaría falsear la IP.
+function leerTrustProxy(valor) {
+  if (valor === undefined || valor.trim() === '') return 1
+  const limpio = valor.trim().toLowerCase()
+  if (limpio === 'false' || limpio === '0') return false
+  if (/^\d+$/.test(limpio)) return Number(limpio)
+  if (limpio === 'true') {
+    throw new Error('TRUST_PROXY=true no está permitido: indica el número de proxies (1 detrás de Nginx) o una lista de IPs')
+  }
+  return valor.trim()
+}
+
 function validateEnv() {
   const trulyMissing = REQUIRED_VARS.filter((key) => process.env[key] === undefined)
 
@@ -57,6 +76,7 @@ function validateEnv() {
     // Origen del frontend, usado para restringir CORS y para armar enlaces de
     // recuperación de contraseña. Opcional: cae a la URL de desarrollo de Vite.
     clientUrl: process.env.CLIENT_URL || 'http://localhost:5173',
+    trustProxy: leerTrustProxy(process.env.TRUST_PROXY),
     // Correo saliente (opcional). Sin SMTP_HOST el sistema no envía nada y ningún flujo
     // se rompe: el acceso de los alumnos se resuelve con la contraseña temporal que ve
     // el profesor. Las credenciales reales viven solo en el .env del servidor.

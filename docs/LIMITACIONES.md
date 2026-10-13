@@ -1,8 +1,8 @@
 # Limitaciones conocidas — SGEC
 
 Documento iniciado en la Sesión 14 del plan de cierre (`PLAN-CIERRE.md`) y actualizado en las
-Sesiones 15 y 16. La Sesión 17 lo completa con el resto de las limitaciones declaradas del sistema; aquí
-están las que se confirmaron con pruebas durante esas sesiones.
+Sesiones 15 y 16. La Sesión 17 lo completa con el resto de las limitaciones declaradas del
+sistema; aquí están las que se confirmaron con pruebas durante esas sesiones.
 
 ## 1. Una clave de materia reutilizada en otro semestre tapa a la anterior
 

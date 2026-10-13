@@ -27,6 +27,7 @@ const {
   RESET_TOKEN_VIGENCIA_MS,
   generarTokenReset,
   generarContrasenaTemporal,
+  ahoraSinMilisegundos,
 } = require('../utils/credenciales')
 
 async function obtenerIdProfesorPropio(idUsuario) {
@@ -462,7 +463,9 @@ async function importarExcel(req, res) {
 
 // POST /api/alumnos/:id/restablecer-acceso
 // Regenera la contraseña temporal de un alumno (perdió la anterior, o venció el enlace
-// de activación). Invalida además cualquier enlace de activación/recuperación pendiente.
+// de activación). Invalida además cualquier enlace de activación/recuperación pendiente y,
+// al anotar contrasena_cambiada_en, toda sesión que el alumno tuviera abierta (ver
+// auth.middleware.js).
 //
 // Quién puede hacerlo:
 //   - Profesor: solo si tiene al alumno inscrito en una materia suya NO cerrada (una
@@ -515,9 +518,10 @@ async function restablecerAcceso(req, res) {
 
   await pool.query(
     `UPDATE usuario
-     SET contrasena_hash = ?, debe_cambiar_contrasena = TRUE, reset_token_hash = NULL, reset_token_expira = NULL
+     SET contrasena_hash = ?, debe_cambiar_contrasena = TRUE, reset_token_hash = NULL, reset_token_expira = NULL,
+         contrasena_cambiada_en = ?
      WHERE id_usuario = ?`,
-    [hash, alumno.id_usuario]
+    [hash, ahoraSinMilisegundos(), alumno.id_usuario]
   )
 
   console.log(

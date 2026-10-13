@@ -1,0 +1,17 @@
+# Nada de esto debe entrar en la imagen del servidor.
+# Dependencias: se instalan dentro de la imagen con `npm ci`.
+node_modules
+npm-debug.log*
+*.log
+
+# Secretos: las variables llegan por el entorno del contenedor (docker-compose.yml).
+.env
+.env.*
+!.env.example
+
+# Archivos subidos: viven en el volumen sgec_uploads, no en la imagen.
+uploads/*
+!uploads/.gitkeep
+
+Dockerfile
+.dockerignore

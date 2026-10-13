@@ -34,7 +34,10 @@ CREATE TABLE usuario (
   reset_token_hash      VARCHAR(255) NULL,
   reset_token_expira    DATETIME NULL,
   -- TRUE = contraseña temporal generada por el sistema; debe cambiarse al primer login.
-  debe_cambiar_contrasena BOOLEAN NOT NULL DEFAULT FALSE
+  debe_cambiar_contrasena BOOLEAN NOT NULL DEFAULT FALSE,
+  -- Último cambio de contraseña (hora de México). Los JWT emitidos antes se rechazan.
+  -- NULL = la contraseña no ha cambiado desde que existe la columna.
+  contrasena_cambiada_en DATETIME NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ── 2. profesor ──────────────────────────────────────────────────────────

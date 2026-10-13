@@ -1,0 +1,15 @@
+# Los contextos de build son ./server y ./client (cada uno con su propio .dockerignore).
+# Este archivo protege cualquier build que se lance desde la raíz del repositorio.
+.git
+.gitignore
+**/node_modules
+**/dist
+**/.env
+**/.env.*
+!**/.env.example
+server/uploads/*
+*.log
+.vscode
+.idea
+docs
+*.md

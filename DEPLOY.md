@@ -1,189 +1,207 @@
-# SGEC — Guía de despliegue en VPS
+# SGEC — Guía de despliegue en un servidor (VPS)
 
-**Dominio:** https://sgec-escom.duckdns.org  
-**VPS:** Ubuntu con Docker y Nginx instalados
+Guía paso a paso para una instalación nueva en un servidor Ubuntu con Docker, Docker Compose
+(2.24 o posterior) y Nginx. La referencia completa de variables, migraciones y correo saliente
+está en [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+
+Este repositorio es público: **ningún dato del servidor real va aquí** (ni su IP, ni
+contraseñas, ni secretos). Usa tu propio acceso SSH y sustituye `<tu-dominio>` por el dominio
+real en cada paso.
+
+> Si lo que vas a hacer es **actualizar** una instalación que ya existe, no sigas esta guía:
+> usa la sección "Actualizar una instalación existente" al final y, para el redeploy de las
+> sesiones 13 a 16, el checklist `docs/cierre/S16-checklist-manual.md`.
 
 ---
 
-## Paso 1 — Clonar el repo en el VPS
+## Paso 1 — Clonar el repositorio
+
+Dentro del servidor:
 
 ```bash
-ssh root@2.24.210.132
-
 cd /var/www
 git clone https://github.com/Vicpip/SGEC.git sgec
 cd sgec
 ```
 
----
-
-## Paso 2 — Colocar los Dockerfiles en su lugar
-
-Copia los archivos que se generaron junto a esta guía:
-
-```bash
-# En tu máquina local, sube los archivos al VPS:
-scp Dockerfile.server root@2.24.210.132:/var/www/sgec/server/Dockerfile
-scp Dockerfile.client root@2.24.210.132:/var/www/sgec/client/Dockerfile
-scp nginx-spa.conf root@2.24.210.132:/var/www/sgec/client/nginx-spa.conf
-scp docker-compose.yml root@2.24.210.132:/var/www/sgec/docker-compose.yml
-```
-
-O créalos directamente en el VPS con nano/vim copiando el contenido.
+El repositorio ya trae `docker-compose.yml`, `server/Dockerfile`, `client/Dockerfile`,
+`client/nginx-spa.conf` y la plantilla `deploy/nginx-vps.conf`. No hay que copiar nada a mano.
 
 ---
 
-## Paso 3 — Crear el archivo .env en el VPS
+## Paso 2 — Crear el archivo `.env`
 
 ```bash
 cd /var/www/sgec
+cp .env.production.example .env
 nano .env
 ```
 
-Pega el contenido de `.env.production` y edita:
-- `DB_PASSWORD` → una contraseña segura
-- `JWT_SECRET` → genera uno con:
-  ```bash
-  node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
-  ```
+Rellena al menos:
+
+| Variable | Valor |
+|---|---|
+| `DB_PASSWORD` | Una contraseña larga y aleatoria: `openssl rand -base64 24` |
+| `JWT_SECRET` | `openssl rand -base64 48` (con menos de 32 caracteres el servidor no arranca) |
+| `CLIENT_URL` | `https://<tu-dominio>` |
+| `VITE_API_URL` | `https://<tu-dominio>/api` |
+
+`chmod 600 .env` para que solo tu usuario pueda leerlo. Ese archivo no se sube nunca al
+repositorio.
 
 ---
 
-## Paso 4 — Exponer puertos en docker-compose.yml
-
-Agrega los puertos al server y client para que Nginx del VPS pueda acceder:
-
-En `docker-compose.yml`, en el servicio `server` agrega:
-```yaml
-ports:
-  - "3001:3001"
-```
-
-En el servicio `client` agrega:
-```yaml
-ports:
-  - "4000:80"
-```
-
----
-
-## Paso 5 — Levantar los contenedores
+## Paso 3 — Levantar los contenedores
 
 ```bash
-cd /var/www/sgec
 docker compose up -d --build
-```
-
-Verifica que los 3 contenedores estén corriendo:
-```bash
 docker compose ps
 ```
 
-Debe mostrar: `sgec_db`, `sgec_server`, `sgec_client` todos con status `Up`.
+Deben quedar `sgec_db`, `sgec_server` y `sgec_client` con estado `Up`. Los puertos del archivo
+base ya son los de producción:
 
-Verifica el backend:
+- `client` en el puerto **4000** del host (el Nginx del host le hace proxy);
+- `server` en **127.0.0.1:3001** — alcanzable desde el Nginx del host, no desde internet;
+- `db` sin puertos publicados.
+
+Comprueba el backend desde el propio servidor:
+
 ```bash
-curl http://localhost:3001/api/health
-# Debe responder: {"status":"ok"}
+curl http://127.0.0.1:3001/api/health
+# {"status":"ok"}
 ```
 
 ---
 
-## Paso 6 — Configurar Nginx en el VPS
+## Paso 4 — Crear el Administrador
+
+La base arranca **vacía**: solo el esquema, sin cuentas. Los datos de ejemplo del repositorio
+(`server/db/seeds/`) traen contraseñas publicadas y no se cargan en producción.
 
 ```bash
-# Copiar la configuración
-cp /var/www/sgec/nginx-vps.conf /etc/nginx/sites-available/sgec
+read -s -p "Contraseña del administrador: " ADMIN_PASSWORD; echo
+docker compose exec -e ADMIN_EMAIL=<correo>@ipn.mx -e ADMIN_PASSWORD="$ADMIN_PASSWORD" \
+  server node db/create_admin.js
+unset ADMIN_PASSWORD
+```
 
-# Activar el sitio
+La contraseña debe tener al menos 12 caracteres con mayúscula, minúscula y número. `read -s`
+evita que quede escrita en el historial de la terminal. El script no la imprime.
+
+Con esa cuenta, desde la aplicación: crea el semestre (Semestres) y da de alta a los profesores
+(Gestión de Profesores). Los profesores crean sus materias e importan a sus alumnos.
+
+**Solo para una demostración** (nunca en la instalación real), los datos de ejemplo se cargan
+de forma explícita:
+
+```bash
+docker compose exec -e SEED_DEMO=true server node db/seeds/run_seeds.js
+```
+
+---
+
+## Paso 5 — Nginx del host
+
+```bash
+cp /var/www/sgec/deploy/nginx-vps.conf /etc/nginx/sites-available/sgec
+nano /etc/nginx/sites-available/sgec        # sustituir <tu-dominio>
 ln -s /etc/nginx/sites-available/sgec /etc/nginx/sites-enabled/sgec
-
-# Deshabilitar el default si existe
 rm -f /etc/nginx/sites-enabled/default
-
-# Verificar sintaxis
 nginx -t
-
-# Recargar Nginx (solo HTTP por ahora, antes del SSL)
 systemctl reload nginx
 ```
 
+La plantilla envía `/api/` a `127.0.0.1:3001` y todo lo demás a `127.0.0.1:4000`, agrega la
+cabecera `X-Forwarded-For` (el backend la necesita para limitar los intentos de inicio de sesión
+por usuario y no para todos a la vez) y sube `client_max_body_size` para los archivos adjuntos.
+
 ---
 
-## Paso 7 — Certificado SSL con Let's Encrypt
+## Paso 6 — Certificado TLS
 
 ```bash
-# Instalar certbot si no está
 apt install certbot python3-certbot-nginx -y
-
-# Generar certificado
-certbot --nginx -d sgec-escom.duckdns.org
-
-# Sigue las instrucciones:
-# - Email: tu correo
-# - Acepta términos: Y
-# - Redirigir HTTP a HTTPS: 2 (Yes)
-```
-
-Certbot modifica automáticamente el nginx.conf con los paths del certificado.
-
-Verifica que la renovación automática funciona:
-```bash
+certbot --nginx -d <tu-dominio>
 certbot renew --dry-run
 ```
 
+Certbot agrega al archivo de Nginx el bloque HTTPS y la redirección desde HTTP.
+
 ---
 
-## Paso 8 — Verificación final
+## Paso 7 — Cortafuegos y verificación
 
 ```bash
-# Reiniciar todo limpio
-systemctl reload nginx
-docker compose restart
+ufw allow OpenSSH
+ufw allow 'Nginx Full'
+ufw deny 3001
+ufw deny 4000
+ufw enable
+ufw status
 ```
 
-Abre en el navegador:
-```
-https://sgec-escom.duckdns.org
-```
+Ojo: Docker publica sus puertos con reglas propias de `iptables` que **no pasan por `ufw`**. Por
+eso el backend se publica solo en `127.0.0.1:3001` (inalcanzable desde fuera con o sin
+cortafuegos). El puerto 4000 sí queda abierto en todas las interfaces: sirve únicamente el
+frontend estático, sin datos. Para cerrarlo también, hazlo en el cortafuegos del proveedor del
+servidor, o cambia en `docker-compose.yml` `"4000:80"` por `"127.0.0.1:4000:80"`.
 
-Debe mostrar la pantalla de login del SGEC con candado verde (HTTPS).
+Compruébalo desde **otra** máquina: `curl -m 5 http://<tu-dominio>:3001/api/health` no debe
+responder.
 
-Prueba login con:
-- admin@ipn.mx / Admin1234!
-- mgarcia@ipn.mx / Profesor1234!
-- s.ramirez@alumno.ipn.mx / Alumno1234!
+Abre `https://<tu-dominio>`: debe mostrar el inicio de sesión con el candado de HTTPS. Entra
+con el Administrador creado en el paso 4.
 
 ---
 
-## Actualizar el proyecto (cuando haya cambios)
+## Actualizar una instalación existente
 
 ```bash
 cd /var/www/sgec
-git pull origin main
+git pull
 docker compose up -d --build
 ```
+
+Si la actualización trae migraciones de base de datos, se aplican justo después, en orden
+(cada script es idempotente y no borra nada):
+
+```bash
+docker compose exec server node db/migrations/aplicar_002.js
+docker compose exec server node db/migrations/aplicar_003.js
+docker compose exec server node db/migrations/aplicar_004.js
+docker compose exec server node db/migrations/aplicar_005.js
+```
+
+Qué agrega cada una y qué falla si falta: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+
+---
+
+## Probar la pila en Docker en tu máquina
+
+Los puertos de desarrollo (80 y 3001 abiertos, sin Nginx delante) están en un archivo aparte
+que se usa de forma explícita:
+
+```bash
+cp .env.production.example .env      # CLIENT_URL=http://localhost  VITE_API_URL=http://localhost:3001/api
+docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --build
+docker compose -f docker-compose.yml -f docker-compose.local.yml exec -e SEED_DEMO=true server node db/seeds/run_seeds.js
+```
+
+Ese archivo no se llama `docker-compose.override.yml` a propósito: Compose aplica ese nombre de
+forma automática, y entonces los puertos de desarrollo también se abrirían en el servidor.
 
 ---
 
 ## Comandos útiles
 
 ```bash
-# Ver logs del backend
-docker compose logs server -f
-
-# Ver logs del frontend
-docker compose logs client -f
-
-# Ver logs de la BD
-docker compose logs db -f
-
-# Reiniciar un contenedor específico
+docker compose logs server -f      # backend
+docker compose logs client -f      # frontend
+docker compose logs db -f          # base de datos
 docker compose restart server
-
-# Detener todo
-docker compose down
-
-# Detener y borrar volúmenes (⚠️ borra la BD)
-docker compose down -v
+docker compose down                # detiene los contenedores; los datos se conservan
 ```
+
+`docker compose down -v` borra además los volúmenes: **elimina la base de datos y los archivos
+subidos**. No lo uses en producción.

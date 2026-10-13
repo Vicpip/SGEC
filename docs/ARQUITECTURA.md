@@ -68,10 +68,24 @@ Servicios de negocio en `server/src/services/`:
 - **publicacion.service.js** — determina si una actividad programada ya es visible al alumno
   (a nivel de condición SQL, no solo en memoria — ver [API.md](./API.md#actividades)).
 - **usuarios.service.js** — datos extendidos de profesor/alumno que complementan a `usuario`.
+- **materias.service.js** — única puerta para buscar una materia por su clave: la acota a quien
+  llama (Profesor: sus materias; Alumno: inscripción vigente; Administrador: exige semestre o
+  id) y acepta `semestre` / `id_materia` para desambiguar.
 - **email.service.js** — correo saliente por SMTP con nodemailer, **opcional**: sin `SMTP_HOST`
   no envía nada y ningún flujo se rompe. Envía el enlace de recuperación de contraseña y el
   correo de bienvenida con enlace de activación; nunca registra cuerpos, enlaces ni tokens
   (`EMAIL_DRY_RUN=true` solo registra destinatario y asunto).
+
+Piezas transversales agregadas en la Sesión 16:
+
+- **config/zonaHoraria.js** — fija la zona del proceso (`America/Mexico_City`) y expone el
+  desfase `-06:00` que `config/db.js` aplica a cada conexión de MySQL. Todas las fechas del
+  sistema son "hora de pared" de México.
+- **middlewares/auth.middleware.js** — además de verificar el JWT, consulta la cuenta en cada
+  petición: rechaza cuentas inactivas y tokens anteriores al último cambio de contraseña.
+- **utils/limitePeticiones.js** — respuesta común de los limitadores; deja en el log la IP que
+  se está contando.
+- **db/create_admin.js** — crea el Administrador inicial de una instalación de producción.
 
 ## Modelo de datos (16 tablas)
 

@@ -17,9 +17,14 @@ const avisosRoutes = require('./routes/avisos.routes')
 const reportesRoutes = require('./routes/reportes.routes')
 const dashboardRoutes = require('./routes/dashboard.routes')
 const archivosRoutes = require('./routes/archivos.routes')
+const { alExcederLimite } = require('./utils/limitePeticiones')
 
 const env = validateEnv()
 const app = express()
+
+// Detrás del Nginx del host: sin esto req.ip sería siempre la del proxy y los límites de
+// peticiones contarían a todos los usuarios como uno solo (ver TRUST_PROXY en config/env.js).
+app.set('trust proxy', env.trustProxy)
 
 app.use(helmet())
 app.use(cors({ origin: env.clientUrl }))
@@ -34,6 +39,8 @@ app.use(
     limit: 300,
     standardHeaders: true,
     legacyHeaders: false,
+    message: { error: 'Demasiadas peticiones. Intenta de nuevo más tarde.' },
+    handler: alExcederLimite('api'),
   })
 )
 

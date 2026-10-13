@@ -127,7 +127,7 @@ Ver DDL completo en `server/db/schema.sql`.
 
 | Tabla | Descripción |
 |---|---|
-| `usuario` | Autenticación y rol (Administrador, Profesor, Alumno). Incluye `correo_alterno` (opcional) y `notificaciones_email` para el sistema de notificaciones por correo |
+| `usuario` | Autenticación y rol (Administrador, Profesor, Alumno). Incluye `correo_alterno` (opcional) y `notificaciones_email` para el sistema de notificaciones por correo, y `contrasena_cambiada_en` (los JWT anteriores a esa fecha se rechazan) |
 | `profesor` | Extiende `usuario`: no_empleado, departamento |
 | `alumno` | Extiende `usuario`: boleta, grupo, carrera (`carrera` es nullable — puede venir vacía en importación Excel) |
 | `semestre` | Período académico (ej. 2026/1) |
@@ -288,17 +288,34 @@ repo). El resumen de cada una vive en `docs/cierre/S<N>.md`.
 | S13 | Adjuntos y acceso de alumnos | ✅ Completa | 9dfcbf5 |
 | S14 | ABC completo y tipo de evaluación | ✅ Completa | 91c096d |
 | S15 | Equipos espejo, reporte y panel del alumno | ✅ Completa | 08a032d |
-| S16 | Hardening de producción | ⏳ Pendiente | — |
+| S16 | Hardening de producción | ✅ Completa | HASH_S16 |
 | S17 | Cierre documental | ⏳ Pendiente | — |
 
 **Pendientes transversales:** los dos que dejó S12 quedaron resueltos en S13 —
 `email.service.js` ya envía por SMTP con nodemailer (opcional: solo si hay variables `SMTP_*`;
 las credenciales reales se configuran en el `.env` del servidor) y los adjuntos se descargan por
-`GET /api/archivos/:tipo/:id`. Lo que sigue abierto es el resto del plan de cierre (S16–S17). Las migraciones `002`
-(`usuario.debe_cambiar_contrasena`, S13), `003` (`actividad.tipo_evaluacion` y
-`materia_alumno.activo`, S14) y `004` (`equipo.id_equipo_espejo`, S15) deben aplicarse, en ese
-orden, en toda base existente antes de desplegar el código (ver `docs/DEPLOYMENT.md`). Limitaciones confirmadas en S14:
-`docs/LIMITACIONES.md`.
+`GET /api/archivos/:tipo/:id`. Lo que sigue abierto es el cierre documental (S17) y la ejecución,
+por una persona, de `docs/cierre/S16-checklist-manual.md` en el servidor (la S16 no tocó
+producción). Las migraciones `002` (`usuario.debe_cambiar_contrasena`, S13), `003`
+(`actividad.tipo_evaluacion` y `materia_alumno.activo`, S14), `004` (`equipo.id_equipo_espejo`,
+S15) y `005` (`usuario.contrasena_cambiada_en`, S16) deben aplicarse, en ese orden, en toda base
+existente al desplegar el código (ver `docs/DEPLOYMENT.md`); sin la 005 toda ruta autenticada
+responde 500. Limitaciones confirmadas: `docs/LIMITACIONES.md`.
+
+Reglas que dejó la S16 (el detalle está en `docs/cierre/S16.md`):
+- Una materia nunca se busca por clave con una consulta propia: se usa
+  `server/src/services/materias.service.js`, que la acota a quien llama. Un mismo profesor no
+  puede repetir clave en un semestre (409).
+- `auth.middleware.js` consulta la cuenta en cada petición: 401 si está inactiva o si el token es
+  anterior a `usuario.contrasena_cambiada_en`. Todo cambio de contraseña debe actualizar esa
+  columna con `ahoraSinMilisegundos()` (`utils/credenciales.js`).
+- Zona horaria única UTC-06:00: `config/zonaHoraria.js` (Node) y `config/db.js` (sesión MySQL).
+  Las fechas son hora de pared de México; no introducir conversiones a UTC.
+- `PUT /api/usuarios/:id` es solo de Administrador; el usuario edita lo suyo con
+  `PATCH /api/usuarios/me` (lista blanca).
+- `docker-compose.yml` es el de producción; los puertos locales van en
+  `docker-compose.local.yml` (nunca un `docker-compose.override.yml`). Producción arranca sin
+  seeds: `server/db/create_admin.js` crea el Administrador y los seeds exigen `SEED_DEMO=true`.
 
 Documentación técnica completa en `docs/`: `ARQUITECTURA.md`, `API.md`, `SECURITY.md`,
 `DEPLOYMENT.md`.

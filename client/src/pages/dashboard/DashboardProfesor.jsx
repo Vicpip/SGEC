@@ -40,7 +40,10 @@ const ACCESOS_RAPIDOS = [
 
 function formatFecha(fecha) {
   if (!fecha) return ''
-  return new Date(fecha).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })
+  // Una fecha sin hora ('2026-08-17', como semestre.fecha_inicio) se interpretaría como
+  // medianoche UTC y en México se mostraría el día anterior: se le fija la hora local.
+  const valor = /^\d{4}-\d{2}-\d{2}$/.test(fecha) ? `${fecha}T00:00:00` : fecha
+  return new Date(valor).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
 function formatFechaHora(fecha) {

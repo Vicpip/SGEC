@@ -1,5 +1,13 @@
-// Ejecuta todos los seeds de desarrollo en orden.
+// Ejecuta todos los seeds de DESARROLLO/DEMO en orden.
 // Uso: node server/db/seeds/run_seeds.js
+//
+// Estos datos traen cuentas con contraseñas publicadas en el repositorio (Admin1234!,
+// Profesor1234!, Alumno1234!): sirven para desarrollar y para una demostración, nunca para
+// una instalación real. Por eso, con NODE_ENV=production el script se niega a correr salvo
+// que se pida de forma explícita con SEED_DEMO=true:
+//   docker compose exec -e SEED_DEMO=true server node db/seeds/run_seeds.js
+// Una instalación de producción arranca vacía y su Administrador se crea con
+// server/db/create_admin.js.
 
 const path = require('path')
 const fs = require('fs')
@@ -23,6 +31,12 @@ const SEED_FILES = [
 ]
 
 async function runSeeds() {
+  if (process.env.NODE_ENV === 'production' && process.env.SEED_DEMO !== 'true') {
+    throw new Error(
+      'NODE_ENV=production: los seeds de demo crean cuentas con contraseñas públicas y no se cargan salvo con SEED_DEMO=true. Para crear el Administrador real usa db/create_admin.js'
+    )
+  }
+
   const connection = await mysql.createConnection({
     host: process.env.DB_HOST,
     port: Number(process.env.DB_PORT),

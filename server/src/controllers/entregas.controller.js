@@ -2,12 +2,18 @@
 //
 // Regla de propiedad: un Profesor solo ve entregas de actividades de materias donde
 // materia.id_profesor = su propio id_profesor. Un Alumno solo ve/crea su propia entrega
-// (entrega.id_alumno = su propio id_alumno) y, en el roster de su equipo, solo el estatus
-// general de sus compañeros (nunca sus archivos ni comentarios).
+// (entrega.id_alumno = su propio id_alumno) y, en el roster de su equipo, de cada compañero
+// recibe únicamente el estatus de la entrega: nunca su nota, los comentarios del profesor,
+// su comentario, la fecha ni sus archivos (ver integranteParaAlumno).
 //
 // Nota sobre entregas tardías: una entrega enviada después de actividad.fecha_limite se
 // acepta sin bloquear — fecha_entrega queda registrada normalmente y es responsabilidad del
 // cliente comparar fecha_entrega contra fecha_limite para mostrar la marca de "tardía".
+//
+// Zona horaria: fecha_limite es un DATETIME con la hora de pared de México y fecha_entrega
+// un TIMESTAMP que MySQL muestra en la zona de la sesión. Las dos se leen en la misma zona
+// porque config/db.js fija la sesión en -06:00 y config/zonaHoraria.js el proceso de Node
+// en America/Mexico_City; `new Date(actividad.fecha_limite)` depende de esto último.
 //
 // El enum de entrega.estatus (server/db/schema.sql) es Pendiente/En revision/Calificada —
 // no existe un valor 'Entregado' en la base de datos: una entrega recién creada, aún sin
@@ -190,6 +196,21 @@ async function listarPorActividad(req, res) {
       .map((it) => {
         const entrega = entregaPorAlumno.get(it.id_alumno)
         const calificacion = calificacionPorAlumno.get(it.id_alumno)
+
+        // Privacidad: un Alumno solo recibe completa su propia fila. De sus compañeros de
+        // equipo, únicamente el estatus de la entrega.
+        if (miIdAlumno !== null && it.id_alumno !== miIdAlumno) {
+          return {
+            id_alumno: it.id_alumno,
+            boleta: it.boleta,
+            nombre: it.nombre,
+            apellido_paterno: it.apellido_paterno,
+            apellido_materno: it.apellido_materno,
+            entrega: entrega ? { estatus: entrega.estatus } : null,
+            calificacion: null,
+          }
+        }
+
         return {
           id_alumno: it.id_alumno,
           boleta: it.boleta,

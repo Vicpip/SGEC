@@ -1,0 +1,14 @@
+# Nada de esto debe entrar en el contexto de build del frontend.
+# Dependencias y build anterior: se generan dentro de la imagen.
+node_modules
+dist
+npm-debug.log*
+*.log
+
+# Variables locales: VITE_API_URL llega como argumento de build (docker-compose.yml).
+.env
+.env.*
+!.env.example
+
+Dockerfile
+.dockerignore

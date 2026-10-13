@@ -8,7 +8,8 @@ Errores comunes a casi todos los endpoints, no repetidos en cada sección:
 
 | Código | Cuándo |
 |---|---|
-| 401 | Falta el header `Authorization`, el token es inválido/expiró, o el usuario referenciado ya no existe/está inactivo |
+| 401 | Falta el header `Authorization`; el token es inválido o expiró; la cuenta ya no existe o está inactiva (`codigo: CUENTA_INACTIVA`); o el token se emitió antes del último cambio de contraseña (`codigo: SESION_INVALIDADA`). El cliente cierra la sesión ante cualquier 401 salvo `CONTRASENA_ACTUAL_INCORRECTA` |
+| 429 | Se superó el límite de peticiones para esa IP (300 por 15 min en toda la API; límites propios en `/auth`) |
 | 403 | Token válido pero rol no permitido, o el recurso no pertenece al usuario autenticado |
 | 400 | Body/params no pasan la validación Joi (`{ message, errores: [...] }`) o falta un parámetro requerido |
 | 404 | El recurso no existe o (para Alumno) no debe revelarse que existe |
@@ -33,6 +34,19 @@ importación o `restablecer-acceso`) quedan con `usuario.debe_cambiar_contrasena
 que emite `/auth/login` para esas cuentas lleva el indicador y, mientras lo lleve,
 `auth.middleware.js` responde **403** `{error, codigo: "CAMBIO_CONTRASENA_REQUERIDO"}` en toda
 ruta que no sea `/api/auth/*`. `change-password` apaga el indicador y devuelve un token nuevo.
+
+**Estado de la cuenta en cada petición.** `auth.middleware.js` no se conforma con la firma del
+JWT: en cada petición autenticada lee la fila del usuario y responde 401 si la cuenta está
+inactiva (`CUENTA_INACTIVA`) o si el token es anterior a `usuario.contrasena_cambiada_en`
+(`SESION_INVALIDADA`). Esa columna la actualizan `change-password`, `reset-password` y
+`POST /alumnos/:id/restablecer-acceso`: cambiar la contraseña cierra todas las sesiones
+abiertas con la anterior (`change-password` devuelve un token nuevo para la sesión que hizo el
+cambio). La comparación es por segundo, la precisión del `iat` del token.
+
+**Límites e IP del cliente.** Los límites cuentan por `req.ip`. Detrás del Nginx del host,
+`TRUST_PROXY=1` (valor por defecto) hace que `req.ip` sea la última dirección de
+`X-Forwarded-For`, la que agrega ese Nginx. La primera petición rechazada de cada ventana deja
+en el log `[rate-limit] <login|forgot-password|api>: límite alcanzado para la IP <ip>`.
 
 `nueva_contrasena` exige mínimo 8 caracteres, al menos una mayúscula y un número (Joi, mismo
 criterio que el copy de Perfil.jsx). El login valida el dominio del correo contra el rol elegido
@@ -199,6 +213,11 @@ de programación — el filtro se apoya sobre todo en la extensión, el MIME es 
 | GET | `/entregas/actividad/:idActividad` | Profesor dueño / Alumno (solo el roster de su propio equipo) | — | 200 `{actividad, equipos: [{id_equipo, nombre, integrantes: [{..., entrega, calificacion}]}], mi_id_alumno}`; 403; 404 |
 | GET | `/entregas/:id` | Profesor dueño / Alumno dueño | — | 200 `{entrega}`; 403; 404 |
 | POST | `/entregas` | Alumno | multipart: `archivos[]` + `{id_actividad, comentario?}` | 201 `{entrega: {..., tardia}, companeros_marcados}`; 403 no pertenece a un equipo objetivo; 404 actividad no encontrada/no visible; 409 ya existe una entrega propia |
+
+**Privacidad del roster.** Cuando quien consulta `GET /entregas/actividad/:idActividad` es un
+Alumno, solo su propia fila viene completa. De cada compañero de equipo recibe `id_alumno`,
+`boleta`, nombre, `entrega: { estatus }` (o `null` si no hay entrega) y `calificacion: null`:
+nunca la nota, los comentarios, la fecha ni los archivos de otro alumno. El Profesor recibe todo.
 
 Si `actividad.entrega_por_equipo = TRUE`, la entrega del alumno y el marcado del resto del
 equipo (fila `entrega` con `estatus = 'En revision'` para quien no tuviera una) ocurren en una

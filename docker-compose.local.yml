@@ -1,0 +1,24 @@
+# SGEC — puertos para probar la pila en Docker en tu propia máquina (sin Nginx delante).
+# Se usa SIEMPRE junto con el archivo base y de forma explícita:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --build
+#
+# No se llama docker-compose.override.yml a propósito: Compose aplica ese nombre de forma
+# automática, y entonces estos puertos también se abrirían en el servidor de producción.
+#
+# `!override` reemplaza la lista de puertos del archivo base en lugar de sumarse a ella
+# (requiere Docker Compose 2.24 o posterior).
+#
+# En tu .env local: CLIENT_URL=http://localhost y VITE_API_URL=http://localhost:3001/api
+
+services:
+  server:
+    environment:
+      # Sin proxy inverso delante: la IP del cliente es la de la conexión.
+      TRUST_PROXY: "0"
+    ports: !override
+      - "3001:3001"
+
+  client:
+    ports: !override
+      - "80:80"

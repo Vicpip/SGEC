@@ -4,6 +4,7 @@ const authController = require('../controllers/auth.controller')
 const authMiddleware = require('../middlewares/auth.middleware')
 const { validateBody } = require('../middlewares/validate.middleware')
 const asyncHandler = require('../utils/asyncHandler')
+const { alExcederLimite } = require('../utils/limitePeticiones')
 const {
   loginSchema,
   forgotPasswordSchema,
@@ -21,6 +22,7 @@ const loginLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Demasiados intentos de inicio de sesión. Intenta de nuevo más tarde.' },
+  handler: alExcederLimite('login'),
 })
 
 const forgotPasswordLimiter = rateLimit({
@@ -29,6 +31,7 @@ const forgotPasswordLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Demasiadas solicitudes. Intenta de nuevo más tarde.' },
+  handler: alExcederLimite('forgot-password'),
 })
 
 router.post('/login', loginLimiter, validateBody(loginSchema), asyncHandler(authController.login))

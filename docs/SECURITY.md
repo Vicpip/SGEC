@@ -182,14 +182,12 @@ Con estos dos fixes, `NODE_ENV=production` en `docker-compose.yml` (ya estaba co
 `CLIENT_URL`/`JWT_SECRET` bien configurados dejan CORS apuntando solo al dominio real y el
 backend rechazando secretos débiles — los tres puntos que pedía este ítem del checklist.
 
-**Nota aparte (no es del alcance de `env.js`, es un archivo de runbook):** `DEPLOY.md` (raíz del
-repo, versionado en git) incluye la IP real del VPS, el dominio real y credenciales de las
-cuentas semilla en texto plano (`Admin1234!`, etc. — las mismas que documentan en claro los
-propios archivos de `server/db/seeds/*.sql` como datos de desarrollo). No se modificó porque es
-el runbook operativo del propio equipo y está fuera del alcance de "no agregar features nuevas"
-de esta sesión, pero queda anotado aquí: si el repositorio en GitHub llegara a ser público,
-conviene mover esos datos a un gestor de secretos o a un README interno no versionado, y rotar
-las contraseñas semilla antes de exponer la URL real a producción.
+**Nota aparte (no es del alcance de `env.js`, es un archivo de runbook):** en la Sesión 12
+`DEPLOY.md` incluía la dirección del VPS y las credenciales de las cuentas semilla en texto
+plano. **Corregido en la Sesión 16:** `DEPLOY.md` ya no contiene ninguna dirección ni
+credencial. Como el repositorio es público y esos datos siguen en su historial, se consideran
+filtrados: la medida real es rotarlos (ver "Sesión 16" más abajo y
+`docs/cierre/S16-checklist-manual.md`).
 
 ## 7. Prueba de penetración manual básica
 
@@ -353,8 +351,85 @@ solo se leyó) está en [cierre/S13.md](./cierre/S13.md).
 - El Administrador puede restablecer a cualquier alumno, pero **no hay pantalla para ello**: solo
   existe el endpoint. Hasta que se agregue, el camino normal de un alumno ya activado es "Olvidé
   mi contraseña", que depende de que el correo SMTP esté configurado.
-- Los JWT son sin estado: tras `restablecer-acceso`, un token normal que el alumno ya tuviera
-  sigue siendo válido hasta expirar (`JWT_EXPIRES_IN`). La Sesión 16 prevé consultar la base de
-  datos en `auth.middleware.js`; ahí puede cerrarse este hueco.
+- ~~Los JWT son sin estado: tras `restablecer-acceso`, un token normal que el alumno ya tuviera
+  sigue siendo válido hasta expirar.~~ **Resuelto en la Sesión 16** (ver más abajo):
+  `auth.middleware.js` consulta la cuenta en cada petición y rechaza los tokens anteriores al
+  último cambio de contraseña.
 - `nodemailer` se fijó en `10.0.10` (sin advisories en `npm audit` a la fecha; las versiones
   `<= 10.0.5` sí los tienen). Requiere Node.js 20 o superior — la imagen Docker ya usa `node:20`.
+
+## Sesión 16 — Hardening de producción
+
+Resumen de lo que cambió en materia de seguridad. El detalle de las pruebas está en
+`docs/cierre/S16.md`; lo que debe ejecutarse en el servidor, en
+`docs/cierre/S16-checklist-manual.md`.
+
+### Sesiones y cuentas
+
+- **Estado de la cuenta en cada petición.** `auth.middleware.js` lee la fila del usuario por su
+  llave primaria en cada petición autenticada. Responde 401 si la cuenta está inactiva o ya no
+  existe (`CUENTA_INACTIVA`): un usuario dado de baja pierde el acceso en ese momento, no cuando
+  vence su token (hasta 8 h después).
+- **Cambiar la contraseña cierra las sesiones anteriores.** La migración 005 agrega
+  `usuario.contrasena_cambiada_en`; la actualizan `change-password`, `reset-password`,
+  "Restablecer acceso" y `create_admin.js`. El middleware rechaza (401 `SESION_INVALIDADA`) todo
+  token cuyo `iat` sea anterior. Cierra el hueco que dejó la Sesión 13 (el token de un alumno
+  seguía vivo tras restablecer su acceso). Límite conocido: la comparación es por segundo, así
+  que un token emitido en el mismo segundo que el cambio sigue siendo válido.
+- **Nadie cambia su propio nombre por la API.** `PUT /api/usuarios/:id` es solo para
+  Administrador; el usuario edita sus preferencias de notificación con `PATCH /api/usuarios/me`,
+  que valida contra una lista blanca (`correo_alterno`, `notificaciones_email`).
+- **Privacidad entre compañeros de equipo.** El roster que recibe un alumno ya no incluye la
+  nota, los comentarios, la fecha ni los archivos de sus compañeros: solo el estatus.
+
+### Red y límites de peticiones
+
+- **`trust proxy`.** Antes no estaba configurado: detrás de Nginx, `req.ip` era la dirección del
+  proxy, de modo que **todos los usuarios compartían el mismo contador** (5 inicios de sesión
+  cada 15 minutos para todo el sistema, y cualquiera podía bloquear el acceso de los demás con
+  cinco intentos fallidos). Ahora `TRUST_PROXY` (por defecto `1`) hace que el límite cuente por
+  la IP real, tomada de la última dirección de `X-Forwarded-For` (la que agrega el Nginx del
+  host, no una que el cliente pueda anteponer). `TRUST_PROXY=true` se rechaza al arrancar.
+- **El backend ya no se publica hacia internet.** `docker-compose.yml` publica el puerto 3001
+  solo en `127.0.0.1`. Docker abre sus puertos sin pasar por `ufw`, así que publicarlo en todas
+  las interfaces lo dejaba alcanzable aunque el cortafuegos dijera lo contrario.
+- **Zona horaria única (UTC-06:00).** Node (`TZ=America/Mexico_City`) y cada sesión de MySQL
+  (`SET time_zone = '-06:00'`) leen las fechas igual. Con los contenedores en UTC, una actividad
+  programada se publicaba 6 horas antes de lo indicado y las entregas se marcaban como tardías
+  6 horas antes de la fecha límite.
+
+### Datos y secretos
+
+- **Sin cuentas de demostración en producción.** Compose ya no carga los seeds; `run_seeds.js`
+  se niega a correr con `NODE_ENV=production` salvo `SEED_DEMO=true`. El Administrador se crea
+  con `server/db/create_admin.js` (contraseña de al menos 12 caracteres, nunca impresa).
+- **Imágenes sin secretos.** Se agregaron `.dockerignore` en la raíz, `server/` y `client/`:
+  antes, `COPY . .` metía en la imagen del servidor cualquier `server/.env`, los `node_modules`
+  locales y los archivos subidos.
+- **`DEPLOY.md` sin datos del servidor.** Se quitaron la dirección del VPS y las contraseñas de
+  las cuentas semilla. El repositorio es público: lo que ya estuvo en el historial se considera
+  conocido, y borrarlo del archivo no lo protege. Hay que **rotar**: `JWT_SECRET` nuevo,
+  contraseña de la base de datos nueva y cuentas semilla desactivadas o con otra contraseña.
+  Recomendación: valorar si el repositorio debe pasar a privado.
+
+### `npm audit` (13 de octubre de 2026)
+
+`npm audit fix` sin `--force` en ambos proyectos.
+
+| Proyecto | Antes | Después |
+|---|---|---|
+| `server/` | 7 (1 crítica, 5 altas, 1 moderada) | 4 (4 altas) |
+| `client/` | 6 (5 altas, 1 moderada) | 3 (2 altas, 1 moderada) |
+
+Resueltos: en el servidor, `proxy-addr` 2.0.7 → 2.0.8 (**crítica**: falsificación de IP con
+subredes de confianza IPv4 mapeadas en IPv6 — es la librería que usa `trust proxy`),
+`ip-address` y `brace-expansion`; en el cliente, `axios` (contaminación de prototipos),
+`brace-expansion` y `source-map-js`.
+
+Hallazgos que quedan, con la decisión tomada:
+
+| Paquete | Dónde | Severidad | Decisión |
+|---|---|---|---|
+| `xlsx` (SheetJS) | servidor y cliente | Alta (contaminación de prototipos, ReDoS) | **Aceptado.** No hay versión corregida en npm. En el servidor solo procesa archivos que sube un Profesor autenticado, limitados por tamaño y tipo. La alternativa es el paquete oficial distribuido fuera de npm (cdn.sheetjs.com); queda como trabajo futuro |
+| `nodemon` → `chokidar` → `braces` | servidor, solo desarrollo | Alta (agotamiento de pila) | **Aceptado.** Es una dependencia de desarrollo: la imagen de producción instala con `npm ci --omit=dev` y no la incluye. La corrección que ofrece npm es bajar a `nodemon@1.14.10`, un cambio incompatible |
+| `vite` / `esbuild` | cliente, solo desarrollo | Alta / moderada | **Aceptado.** Afectan al servidor de desarrollo de Vite, que no se usa en producción (se sirve el build estático con Nginx). La corrección exige saltar a Vite 8, un cambio incompatible que no se hace a tres días de la entrega |

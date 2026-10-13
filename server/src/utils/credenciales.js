@@ -37,10 +37,19 @@ function generarContrasenaTemporal() {
   return bloques.join('-')
 }
 
+// Instante actual truncado al segundo, para usuario.contrasena_cambiada_en. La columna es
+// DATETIME sin fracción y MySQL REDONDEA los milisegundos: sin truncar, un cambio hecho en
+// el segundo 10.6 se guardaría como 11 y el token que se emite enseguida (iat = 10)
+// quedaría invalidado por auth.middleware.js.
+function ahoraSinMilisegundos() {
+  return new Date(Math.floor(Date.now() / 1000) * 1000)
+}
+
 module.exports = {
   RONDAS_BCRYPT,
   RESET_TOKEN_VIGENCIA_MS,
   generarTokenReset,
   hashTokenReset,
   generarContrasenaTemporal,
+  ahoraSinMilisegundos,
 }

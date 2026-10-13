@@ -1,4 +1,18 @@
-version: "3.9"
+# SGEC — archivo base: PRODUCCIÓN, detrás del Nginx del host (ver DEPLOY.md).
+#
+# Puertos:
+#   - client → 4000 del host. El Nginx del host hace proxy de "/" hacia aquí.
+#   - server → 3001, publicado SOLO en 127.0.0.1: el Nginx del host hace proxy de "/api"
+#     hacia ahí, pero desde fuera de la máquina no se puede llegar directo a Node.
+#   - db     → sin puertos publicados.
+#
+# Desarrollo local con Docker (puertos 80 y 3001 abiertos): este archivo MÁS el local, de
+# forma explícita. No existe un docker-compose.override.yml a propósito, porque Compose lo
+# aplicaría solo y también se aplicaría en el servidor.
+#   docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --build
+#
+# Datos iniciales: la base arranca vacía (solo el esquema). El Administrador se crea con
+# server/db/create_admin.js; los seeds de demo se cargan únicamente con SEED_DEMO=true.
 
 services:
   # ── Base de datos MySQL ───────────────────────────────────────────────
@@ -6,18 +20,19 @@ services:
     image: mysql:8.4
     container_name: sgec_db
     restart: always
+    # Hora del centro de México, fija en UTC-06:00 (ver server/src/config/zonaHoraria.js).
+    command: ["--default-time-zone=-06:00"]
     environment:
+      TZ: America/Mexico_City
       MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
       MYSQL_DATABASE: sgec
       MYSQL_USER: ${DB_USER}
       MYSQL_PASSWORD: ${DB_PASSWORD}
     volumes:
       - sgec_db_data:/var/lib/mysql
-      - ./server/db/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
-      - ./server/db/seeds/00_admin.sql:/docker-entrypoint-initdb.d/02_admin.sql
-      - ./server/db/seeds/01_semestre.sql:/docker-entrypoint-initdb.d/03_semestre.sql
-      - ./server/db/seeds/02_profesor.sql:/docker-entrypoint-initdb.d/04_profesor.sql
-      - ./server/db/seeds/03_alumno.sql:/docker-entrypoint-initdb.d/05_alumno.sql
+      # Solo se ejecuta la primera vez que se crea el volumen. Una base que ya existe se
+      # actualiza con las migraciones de server/db/migrations/ (ver docs/DEPLOYMENT.md).
+      - ./server/db/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
     networks:
       - sgec_net
     healthcheck:
@@ -36,13 +51,17 @@ services:
     environment:
       PORT: 3001
       NODE_ENV: production
+      TZ: America/Mexico_City
+      # Un proxy inverso delante de Node (el Nginx del host): los límites de peticiones
+      # cuentan por la IP real del cliente.
+      TRUST_PROXY: ${TRUST_PROXY:-1}
       DB_HOST: db
       DB_PORT: 3306
       DB_NAME: sgec
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
-      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-8h}
       UPLOAD_DIR: ${UPLOAD_DIR:-./uploads}
       MAX_FILE_SIZE_MB: ${MAX_FILE_SIZE_MB:-20}
       ALLOWED_EMAIL_DOMAINS: ${ALLOWED_EMAIL_DOMAINS}
@@ -56,7 +75,7 @@ services:
       EMAIL_FROM: ${EMAIL_FROM:-}
       EMAIL_DRY_RUN: ${EMAIL_DRY_RUN:-false}
     ports:
-      - "3001:3001"
+      - "127.0.0.1:3001:3001"
     volumes:
       - sgec_uploads:/app/uploads
     depends_on:
@@ -75,7 +94,7 @@ services:
     container_name: sgec_client
     restart: always
     ports:
-      - "80:80"
+      - "4000:80"
     networks:
       - sgec_net
 
