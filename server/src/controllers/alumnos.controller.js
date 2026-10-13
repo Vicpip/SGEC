@@ -20,6 +20,7 @@
 const bcrypt = require('bcryptjs')
 const pool = require('../config/db')
 const { parsearAlumnosDesdeExcel, validarAlumno } = require('../services/excel.service')
+const { resolverMateriaPorClave } = require('../services/materias.service')
 const { correoHabilitado, enviarCorreoBienvenida } = require('../services/email.service')
 const {
   RONDAS_BCRYPT,
@@ -201,15 +202,13 @@ async function crear(req, res) {
     return res.status(400).json({ errores })
   }
 
-  const idProfesor = await obtenerIdProfesorPropio(req.user.id_usuario)
-  const [materiaRows] = await pool.query(
-    'SELECT id_materia FROM materia WHERE clave = ? AND id_profesor = ? ORDER BY fecha_creacion DESC LIMIT 1',
-    [claveMateria, idProfesor]
-  )
-  const materiaRow = materiaRows[0]
-
-  if (!materiaRow) {
-    return res.status(404).json({ error: 'Materia no encontrada' })
+  const { materia: materiaRow, error: errorMateria } = await resolverMateriaPorClave(req.user, {
+    clave: claveMateria,
+    idMateria: req.body.id_materia,
+    semestre: req.body.semestre,
+  })
+  if (errorMateria) {
+    return res.status(errorMateria.status).json({ error: errorMateria.mensaje })
   }
 
   const conexion = await pool.getConnection()
@@ -253,16 +252,13 @@ async function listar(req, res) {
     return res.status(400).json({ error: 'El parámetro materia (clave) es requerido' })
   }
 
-  const idProfesor = await obtenerIdProfesorPropio(req.user.id_usuario)
-
-  const [materiaRows] = await pool.query(
-    'SELECT id_materia, nombre, grupo FROM materia WHERE clave = ? AND id_profesor = ? ORDER BY fecha_creacion DESC LIMIT 1',
-    [materia, idProfesor]
-  )
-  const materiaRow = materiaRows[0]
-
-  if (!materiaRow) {
-    return res.status(404).json({ error: 'Materia no encontrada' })
+  const { materia: materiaRow, error: errorMateria } = await resolverMateriaPorClave(req.user, {
+    clave: materia,
+    idMateria: req.query.id_materia,
+    semestre: req.query.semestre,
+  })
+  if (errorMateria) {
+    return res.status(errorMateria.status).json({ error: errorMateria.mensaje })
   }
 
   const [alumnos] = await pool.query(
@@ -281,7 +277,7 @@ async function listar(req, res) {
 
   res.status(200).json({
     alumnos,
-    materia: { id_materia: materiaRow.id_materia, clave: materia, nombre: materiaRow.nombre, grupo: materiaRow.grupo },
+    materia: { id_materia: materiaRow.id_materia, clave: materiaRow.clave, nombre: materiaRow.nombre, grupo: materiaRow.grupo, semestre: materiaRow.semestre },
   })
 }
 
@@ -396,15 +392,13 @@ async function importarExcel(req, res) {
     return res.status(400).json({ error: 'El campo materia (clave) es requerido' })
   }
 
-  const idProfesor = await obtenerIdProfesorPropio(req.user.id_usuario)
-  const [materiaRows] = await pool.query(
-    'SELECT id_materia FROM materia WHERE clave = ? AND id_profesor = ? ORDER BY fecha_creacion DESC LIMIT 1',
-    [claveMateria, idProfesor]
-  )
-  const materiaRow = materiaRows[0]
-
-  if (!materiaRow) {
-    return res.status(404).json({ error: 'Materia no encontrada' })
+  const { materia: materiaRow, error: errorMateria } = await resolverMateriaPorClave(req.user, {
+    clave: claveMateria,
+    idMateria: req.body.id_materia,
+    semestre: req.body.semestre,
+  })
+  if (errorMateria) {
+    return res.status(errorMateria.status).json({ error: errorMateria.mensaje })
   }
 
   let filas
@@ -659,15 +653,13 @@ async function darDeBaja(req, res) {
     return res.status(400).json({ error: 'El parámetro materia (clave) es requerido' })
   }
 
-  const idProfesor = await obtenerIdProfesorPropio(req.user.id_usuario)
-  const [materiaRows] = await pool.query(
-    'SELECT id_materia FROM materia WHERE clave = ? AND id_profesor = ? ORDER BY fecha_creacion DESC LIMIT 1',
-    [materia, idProfesor]
-  )
-  const materiaRow = materiaRows[0]
-
-  if (!materiaRow) {
-    return res.status(404).json({ error: 'Materia no encontrada' })
+  const { materia: materiaRow, error: errorMateria } = await resolverMateriaPorClave(req.user, {
+    clave: materia,
+    idMateria: req.query.id_materia,
+    semestre: req.query.semestre,
+  })
+  if (errorMateria) {
+    return res.status(errorMateria.status).json({ error: errorMateria.mensaje })
   }
 
   const [inscripcion] = await pool.query(

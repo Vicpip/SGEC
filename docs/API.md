@@ -40,16 +40,19 @@ antes de tocar la base de datos.
 
 ## usuarios
 
-Base de Gestión de Profesores (Admin) y Perfil (todos). `GET/PUT /:id` los puede invocar el
-propio usuario o un Administrador — nunca otro Profesor/Alumno. El campo `rol` nunca se acepta
-en la actualización.
+Base de Gestión de Profesores (Admin) y Perfil (todos). `GET /:id` lo puede invocar el propio
+usuario o un Administrador — nunca otro Profesor/Alumno. `PUT /:id` es exclusivo del
+Administrador: nadie cambia su propio nombre por la API. Lo único que un usuario edita de su
+cuenta son sus preferencias de notificación, con `PATCH /me`. El campo `rol` nunca se acepta en
+una actualización.
 
 | Método | Ruta | Rol | Body / params | Respuestas |
 |---|---|---|---|---|
 | GET | `/usuarios` | Administrador | `?rol=Profesor` agrega materias/alumnos totales por profesor | 200 `{usuarios}` |
 | GET | `/usuarios/:id` | Propio o Administrador | — | 200 `{usuario}`; 403 si no es propio; 404 |
 | POST | `/usuarios` | Administrador | `{correo_institucional, contrasena, rol: Profesor|Administrador, nombre, apellido_paterno, apellido_materno?, no_empleado (requerido si Profesor), departamento?}` | 201 `{usuario}`; 400 dominio inválido; 409 correo o no_empleado duplicado |
-| PUT | `/usuarios/:id` | Propio o Administrador | `{nombre, apellido_paterno, apellido_materno?, correo_alterno?, notificaciones_email?, no_empleado?, departamento?}` | 200 `{message}`; 403 si `no_empleado` lo manda alguien que no es Administrador; 409 `no_empleado` duplicado |
+| PUT | `/usuarios/:id` | Administrador | `{nombre, apellido_paterno, apellido_materno?, correo_alterno?, notificaciones_email?, no_empleado?, departamento?}` (`correo_alterno` y `notificaciones_email` solo se modifican si vienen) | 200 `{message}`; 400 campo no permitido; 403 si no es Administrador (también sobre la cuenta propia); 404; 409 `no_empleado` duplicado |
+| PATCH | `/usuarios/me` | Cualquier rol (la cuenta del JWT) | `{correo_alterno?, notificaciones_email?}` — lista blanca, al menos uno | 200 `{message, usuario: {correo_alterno, notificaciones_email}}`; 400 si viene cualquier otro campo (`nombre`, `rol`, `activo`…), un correo inválido o el cuerpo vacío |
 | PATCH | `/usuarios/:id/desactivar` | Administrador | — | 200 `{message}`; 404 |
 | PATCH | `/usuarios/:id/reactivar` | Administrador | — | 200 `{message}` (idempotente); 404; 409 si la cuenta no es de un Profesor |
 
@@ -75,9 +78,24 @@ cualquiera.
 |---|---|---|---|---|
 | GET | `/materias` | Profesor (las suyas) / Administrador (todas) | `?semestre=<clave>` | 200 `{materias}` (incluye `total_alumnos`, `total_equipos`) |
 | GET | `/materias/:id` | Profesor dueño / Administrador | — | 200 `{materia}`; 403; 404 |
-| POST | `/materias` | Profesor, Administrador | `{clave, nombre, grupo, id_semestre, id_profesor (requerido solo si lo crea un Administrador)}` | 201 `{materia}`; 400 semestre/profesor inexistente; 409 ya existe esa combinación clave + grupo + semestre (la misma clave con otro grupo sí se permite); 422 el semestre está inactivo |
-| PUT | `/materias/:id` | Profesor dueño / Administrador | `{clave, nombre, grupo, id_semestre, estatus, id_profesor?}` | 200 `{message}`; 403; 404; 409; 422 si se intenta mover la materia a un semestre inactivo (editar una que ya está en él sí se permite) |
+| POST | `/materias` | Profesor, Administrador | `{clave, nombre, grupo, id_semestre, id_profesor (requerido solo si lo crea un Administrador)}` | 201 `{materia}`; 400 semestre/profesor inexistente; 409 si ese profesor ya tiene una materia con esa clave en el semestre (aunque el grupo sea otro), o si otro profesor ya usa esa clave + grupo + semestre; 422 el semestre está inactivo |
+| PUT | `/materias/:id` | Profesor dueño / Administrador | `{clave, nombre, grupo, id_semestre, estatus, id_profesor?}` | 200 `{message}`; 403; 404; 409 (mismas dos reglas que el alta); 422 si se intenta mover la materia a un semestre inactivo (editar una que ya está en él sí se permite) |
 | PATCH | `/materias/:id/desactivar` | Profesor dueño / Administrador | — | 200 `{message}` (`estatus = 'Cerrada'`); 403; 404 |
+
+**Clave de materia.** La clave no es única en el sistema: profesores distintos pueden usar la
+misma en un semestre, y una clave puede reutilizarse en otro semestre. Lo que no se permite es
+que un mismo profesor tenga dos materias con la misma clave en el mismo semestre (409: "Ya tienes
+una materia con esa clave en este semestre; usa una clave distinta para el otro grupo (por
+ejemplo, agregando el grupo al final)").
+
+**Resolución por clave.** Las rutas que reciben `materia=<clave>` (`GET /alumnos`, `POST /alumnos`,
+`POST /alumnos/importar`, `PATCH /alumnos/:id/baja`, `GET /equipos` y `GET /actividades` del
+Profesor) buscan la materia solo entre las del profesor autenticado
+(`services/materias.service.js`). Aceptan además dos parámetros opcionales para desambiguar,
+en el query string o en el cuerpo según la ruta: `semestre=<clave del semestre>` e
+`id_materia=<id>` (un id de otro profesor responde 404). Sin ellos, si el profesor reutilizó la
+clave en otro semestre se toma la materia más reciente. Ninguna de esas rutas está abierta al
+Administrador.
 
 ## alumnos
 
@@ -85,11 +103,11 @@ Pantallas 07, 08, 09. Un Profesor solo ve alumnos de materias donde es dueño.
 
 | Método | Ruta | Rol | Body / params | Respuestas |
 |---|---|---|---|---|
-| GET | `/alumnos?materia=<clave>` | Profesor | — | 200 `{alumnos, materia}`; 400 falta `materia`; 404 materia no encontrada/no propia |
+| GET | `/alumnos?materia=<clave>` | Profesor | opcionales `&semestre=` / `&id_materia=` | 200 `{alumnos, materia}` (`materia` incluye `semestre`); 400 falta `materia` o `id_materia` no numérico; 404 materia no encontrada/no propia |
 | GET | `/alumnos/buscar?q=<texto>` | Administrador | `q`: parte del correo institucional o de la boleta (mínimo 3 caracteres) | 200 `{alumnos}`: como máximo 10, cada uno solo con `{id_alumno, nombre, correo_institucional, boleta, activo, acceso_pendiente}`; 400 `q` ausente o de menos de 3 caracteres; 403 Profesor o Alumno |
 | GET | `/alumnos/:id` | Profesor (con materia compartida) | — | 200 `{alumno}`; 403 sin materia en común; 404 |
 | GET | `/alumnos/:id/actividades` | Profesor (con materia compartida) | — | 200 `{alumno, actividades}` (incluye equipo y calificación por actividad); 403; 404 |
-| POST | `/alumnos` | Profesor | `{boleta, nombre, apellido_paterno, apellido_materno?, correo, grupo, carrera?, materia}` (`materia` = clave) | 201 `{alumno, credenciales}`; 400 datos inválidos; 404 materia no propia; 409 boleta/correo en conflicto |
+| POST | `/alumnos` | Profesor | `{boleta, nombre, apellido_paterno, apellido_materno?, correo, grupo, carrera?, materia}` (`materia` = clave; opcionales `semestre`, `id_materia`) | 201 `{alumno, credenciales}`; 400 datos inválidos; 404 materia no propia; 409 boleta/correo en conflicto |
 | POST | `/alumnos/importar` | Profesor | multipart: `archivo` (.xlsx/.xls, multer memoria, `MAX_FILE_SIZE_MB`, 1 archivo), `materia` (clave) | 200 `{resultado: {total, insertados, inscritos, ya_inscritos, errores: [{fila, errores}]}, credenciales}`; 400 archivo inválido/falta materia; 404 materia no propia |
 | PUT | `/alumnos/:id` | Profesor con el alumno inscrito (inscripción vigente) en una materia suya no cerrada | `{boleta (10 dígitos), nombre, apellido_paterno, apellido_materno?, grupo, carrera?}` — **el correo institucional no se edita**: enviar `correo` o `correo_institucional` responde 400 | 200 `{alumno}`; 400; 403; 404; 409 boleta duplicada |
 | PATCH | `/alumnos/:id/baja?materia=<clave>` | Profesor dueño de esa materia | — | 200 `{message}` (baja lógica: `materia_alumno.activo = FALSE`); 400 falta `materia`; 404 materia no propia o alumno no inscrito en ella; 409 `{error, equipos: [{id_equipo, nombre, tipo}]}` si pertenece a un equipo activo de esa materia |
@@ -127,7 +145,7 @@ Escritura: solo Profesor.
 
 | Método | Ruta | Rol | Body / params | Respuestas |
 |---|---|---|---|---|
-| GET | `/equipos?materia=<clave>` | Profesor / Alumno (ignora `materia`, siempre los suyos) | — | 200 `{equipos, materia?}` (con integrantes) |
+| GET | `/equipos?materia=<clave>` | Profesor / Alumno (ignora `materia`, siempre los suyos) | opcionales `&semestre=` / `&id_materia=` (Profesor) | 200 `{equipos, materia?}` (con integrantes) |
 | GET | `/equipos/:id` | Profesor dueño / Alumno integrante | — | 200 `{equipo}`; 403; 404 |
 | POST | `/equipos` | Profesor | `{id_materia, nombre, tipo: Practica|Tarea|Proyecto, integrantes: [3 o 4 ids únicos]}` | 201 `{equipo, equipo_espejo}` (`equipo_espejo` = `{id_equipo, tipo}` de la fila gemela, o `null` en Proyecto); 400 menos de 3, más de 4, repetidos o integrante no inscrito; 404 materia no propia; 409 integrante ya tiene equipo de ese tipo |
 | POST | `/equipos/generar` | Profesor | `{id_materia, tipo}` | 201 `{equipos, equipos_creados, alumnos_sin_asignar, ids_alumnos_sin_asignar, sin_asignar: [{id_alumno, nombre}]}`; 404 materia no propia; 422 `{error, alumnos_disponibles, sin_asignar}` con menos de 3 alumnos disponibles |
@@ -152,7 +170,7 @@ disco, `MAX_FILE_SIZE_MB`, hasta 10 archivos, extensión+MIME en lista blanca
 
 | Método | Ruta | Rol | Body / params | Respuestas |
 |---|---|---|---|---|
-| GET | `/actividades?materia=<clave>` | Profesor (las de su materia) / Alumno (las visibles para él) | — | 200 `{actividades, materia?}` |
+| GET | `/actividades?materia=<clave>` | Profesor (las de su materia) / Alumno (las visibles para él, de materias con inscripción vigente) | opcionales `&semestre=` / `&id_materia=` (Profesor) | 200 `{actividades, materia?}` |
 | GET | `/actividades/:id` | Profesor dueño / Alumno con acceso | — | 200 `{actividad}`; 403; 404 (también si está programada y aún no visible) |
 | POST | `/actividades` | Profesor | multipart: `archivos[]` + `{id_materia, id_equipo?, todos_los_equipos, entrega_por_equipo, titulo, descripcion?, tipo: En clase|Practica|Tarea|Proyecto, tipo_evaluacion?, fecha_limite, programada, fecha_publicacion (requerida si programada)}` | 201 `{actividad}`; 400; 404 materia no propia; 422 sin equipos del tipo indicado |
 | PUT | `/actividades/:id` | Profesor dueño | `{titulo, descripcion?, tipo_evaluacion?, fecha_limite, programada, fecha_publicacion}` + opcionales `{tipo, entrega_por_equipo, todos_los_equipos, id_equipo}` (si se omiten se conservan) | 200 `{message}`; 400; 403; 404; 409 actividad desactivada; 409 `codigo: ACTIVIDAD_CON_ENTREGAS` si se intenta cambiar `tipo`, `entrega_por_equipo` o el destino y la actividad ya tiene entregas o calificaciones; 422 sin equipos del tipo |
@@ -229,7 +247,7 @@ llega a "encontrarla").
 | Método | Ruta | Rol | Body / params | Respuestas |
 |---|---|---|---|---|
 | GET | `/reportes?semestre=&materia=&tipo=` | Profesor | `tipo`: `Practica`, `Tarea`, `Proyecto` o `Todos` | 200 `{generado_en, filtros, equipos: [...], resumen, nota_promedio, nota_realizadas}` (JSON para vista previa); 400 `tipo` no válido |
-| GET | `/reportes/pdf?semestre=&materia=&tipo=` | Profesor | — | 200 `application/pdf`, `Content-Disposition: attachment` |
+| GET | `/reportes/pdf?semestre=&materia=&tipo=` | Profesor | — | 200 `application/pdf`, `Content-Disposition: attachment`. Carta horizontal: tabla "Desempeño por equipo" y tabla "Detalle por actividad"; las filas no se parten entre páginas y cada página repite el encabezado de la tabla y lleva "Página X de Y" |
 | GET | `/reportes/excel?semestre=&materia=&tipo=` | Profesor | — | 200 `application/vnd...spreadsheetml.sheet`, `Content-Disposition: attachment` |
 
 Cada fila de `equipos` trae los 6 campos requeridos: profesor, unidad de aprendizaje (materia),

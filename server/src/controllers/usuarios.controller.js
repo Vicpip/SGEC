@@ -1,10 +1,12 @@
 // Gestión de cuentas de usuario (base para profesor/alumno/administrador).
 // Usado por Gestión de Profesores (Admin) y Perfil (todos los roles).
 //
-// Regla de propiedad de recursos: GET/PUT /:id solo los puede invocar el propio
-// usuario o un Administrador — nunca otro Profesor/Alumno. El campo `rol` nunca
-// se acepta en la actualización (ni siquiera para un Administrador): un cambio
-// de rol es una operación excepcional fuera del alcance de este endpoint.
+// Regla de propiedad de recursos: GET /:id solo lo puede invocar el propio usuario o un
+// Administrador — nunca otro Profesor/Alumno. PUT /:id es exclusivo del Administrador (lo
+// exige la ruta): nadie cambia su propio nombre por la API. Lo único que un usuario edita
+// de su cuenta son sus preferencias de notificación, por PATCH /me. El campo `rol` nunca
+// se acepta en una actualización (ni siquiera para un Administrador): un cambio de rol es
+// una operación excepcional fuera del alcance de estos endpoints.
 
 const bcrypt = require('bcryptjs')
 const pool = require('../config/db')
@@ -136,13 +138,11 @@ async function crear(req, res) {
   }
 }
 
+// PUT /api/usuarios/:id — solo Administrador (Gestión de Profesores). El correo alterno y
+// las notificaciones solo se tocan si vienen en la petición: son preferencias del propio
+// usuario y el formulario del Administrador no las envía.
 async function actualizar(req, res) {
   const { id } = req.params
-
-  if (!esPropioOAdministrador(req, id)) {
-    return res.status(403).json({ error: 'No tienes permiso para editar este usuario' })
-  }
-
   const {
     nombre,
     apellido_paterno,
@@ -153,22 +153,22 @@ async function actualizar(req, res) {
     no_empleado,
   } = req.body
 
-  if (no_empleado !== undefined && req.user.rol !== 'Administrador') {
-    return res.status(403).json({ error: 'Solo un Administrador puede modificar el número de empleado' })
+  const campos = ['nombre = ?', 'apellido_paterno = ?', 'apellido_materno = ?']
+  const params = [nombre, apellido_paterno, apellido_materno || null]
+  if (correo_alterno !== undefined) {
+    campos.push('correo_alterno = ?')
+    params.push(correo_alterno || null)
+  }
+  if (notificaciones_email !== undefined) {
+    campos.push('notificaciones_email = ?')
+    params.push(notificaciones_email)
   }
 
   try {
-    await pool.query(
-      'UPDATE usuario SET nombre = ?, apellido_paterno = ?, apellido_materno = ?, correo_alterno = ?, notificaciones_email = ? WHERE id_usuario = ?',
-      [
-        nombre,
-        apellido_paterno,
-        apellido_materno || null,
-        correo_alterno || null,
-        notificaciones_email ?? true,
-        id,
-      ]
-    )
+    const [result] = await pool.query(`UPDATE usuario SET ${campos.join(', ')} WHERE id_usuario = ?`, [...params, id])
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Usuario no encontrado' })
+    }
 
     if (departamento !== undefined || no_empleado !== undefined) {
       await pool.query(
@@ -184,6 +184,38 @@ async function actualizar(req, res) {
     }
     throw err
   }
+}
+
+// PATCH /api/usuarios/me — el usuario autenticado (cualquier rol) edita sus preferencias de
+// notificación: correo_alterno y notificaciones_email, y nada más. El validador es una lista
+// blanca (cualquier otro campo, como nombre, rol o activo, responde 400) y la cuenta que se
+// modifica es siempre la del JWT, nunca un id enviado por el cliente.
+async function actualizarPropio(req, res) {
+  const { correo_alterno, notificaciones_email } = req.body
+
+  const campos = []
+  const params = []
+  if (correo_alterno !== undefined) {
+    campos.push('correo_alterno = ?')
+    params.push(correo_alterno || null)
+  }
+  if (notificaciones_email !== undefined) {
+    campos.push('notificaciones_email = ?')
+    params.push(notificaciones_email)
+  }
+
+  await pool.query(`UPDATE usuario SET ${campos.join(', ')} WHERE id_usuario = ?`, [...params, req.user.id_usuario])
+
+  const [rows] = await pool.query('SELECT correo_alterno, notificaciones_email FROM usuario WHERE id_usuario = ?', [
+    req.user.id_usuario,
+  ])
+  res.status(200).json({
+    message: 'Preferencias actualizadas',
+    usuario: {
+      correo_alterno: rows[0].correo_alterno,
+      notificaciones_email: Boolean(rows[0].notificaciones_email),
+    },
+  })
 }
 
 async function desactivar(req, res) {
@@ -219,4 +251,4 @@ async function reactivar(req, res) {
   res.status(200).json({ message: 'Profesor reactivado' })
 }
 
-module.exports = { listar, obtener, crear, actualizar, desactivar, reactivar }
+module.exports = { listar, obtener, crear, actualizar, actualizarPropio, desactivar, reactivar }

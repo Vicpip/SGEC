@@ -29,6 +29,24 @@ async function obtenerIdProfesorPropio(idUsuario) {
   return rows[0]?.id_profesor ?? null
 }
 
+const MENSAJE_CLAVE_REPETIDA =
+  'Ya tienes una materia con esa clave en este semestre; usa una clave distinta para el otro grupo (por ejemplo, agregando el grupo al final)'
+
+// Un mismo profesor no puede tener dos materias con la misma clave en el mismo semestre
+// (aunque el grupo sea distinto, y sin importar su estatus): las pantallas de alumnos,
+// equipos y actividades identifican la materia por su clave y solo alcanzarían una de las
+// dos (ver services/materias.service.js). Profesores distintos sí pueden repetir clave.
+async function profesorYaTieneClave(idProfesor, clave, idSemestre, idMateriaExcluida = null) {
+  const params = [idProfesor, clave, idSemestre]
+  let sql = 'SELECT id_materia FROM materia WHERE id_profesor = ? AND clave = ? AND id_semestre = ?'
+  if (idMateriaExcluida) {
+    sql += ' AND id_materia != ?'
+    params.push(idMateriaExcluida)
+  }
+  const [rows] = await pool.query(`${sql} LIMIT 1`, params)
+  return rows.length > 0
+}
+
 async function listar(req, res) {
   const { semestre } = req.query
   const condiciones = []
@@ -103,8 +121,12 @@ async function crear(req, res) {
       .json({ error: `El semestre ${semestreRows[0].clave} está inactivo: no se pueden crear materias en él` })
   }
 
-  // Misma regla que el índice único uk_materia_clave_grupo_semestre: lo que no se puede
-  // repetir es la combinación clave + grupo + semestre (la misma clave con otro grupo sí).
+  if (await profesorYaTieneClave(idProfesorFinal, clave, id_semestre)) {
+    return res.status(409).json({ error: MENSAJE_CLAVE_REPETIDA })
+  }
+
+  // Índice único uk_materia_clave_grupo_semestre: tampoco se repite la combinación
+  // clave + grupo + semestre entre profesores distintos.
   const [duplicado] = await pool.query(
     'SELECT id_materia FROM materia WHERE clave = ? AND grupo = ? AND id_semestre = ?',
     [clave, grupo, id_semestre]
@@ -182,6 +204,10 @@ async function actualizar(req, res) {
     return res
       .status(422)
       .json({ error: `El semestre ${semestreRows[0].clave} está inactivo: no se pueden mover materias a él` })
+  }
+
+  if (await profesorYaTieneClave(idProfesorFinal, clave, id_semestre, materia.id_materia)) {
+    return res.status(409).json({ error: MENSAJE_CLAVE_REPETIDA })
   }
 
   const [duplicado] = await pool.query(

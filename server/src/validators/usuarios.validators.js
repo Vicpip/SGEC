@@ -36,4 +36,13 @@ const actualizarUsuarioSchema = Joi.object({
   departamento: Joi.string().trim().max(100).allow('', null),
 })
 
-module.exports = { crearUsuarioSchema, actualizarUsuarioSchema }
+// PATCH /api/usuarios/me: lista blanca. Joi rechaza (400) cualquier campo que no esté aquí,
+// así que nombre, apellidos, rol, activo, correo institucional, etc. no se pueden enviar.
+const actualizarPerfilPropioSchema = Joi.object({
+  correo_alterno: Joi.string().trim().max(150).email({ tlds: false }).allow('', null),
+  notificaciones_email: Joi.boolean().strict(),
+})
+  .min(1)
+  .messages({ 'object.min': 'Envía correo_alterno o notificaciones_email' })
+
+module.exports = { crearUsuarioSchema, actualizarUsuarioSchema, actualizarPerfilPropioSchema }

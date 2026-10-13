@@ -15,6 +15,7 @@
 
 const pool = require('../config/db')
 const { asignarEquiposAleatorio, tiposEspejo, tipoEspejoDe } = require('../services/asignacion.service')
+const { resolverMateriaPorClave } = require('../services/materias.service')
 
 async function obtenerIdProfesorPropio(idUsuario) {
   const [rows] = await pool.query('SELECT id_profesor FROM profesor WHERE id_usuario = ?', [idUsuario])
@@ -141,15 +142,13 @@ async function listar(req, res) {
     return res.status(400).json({ error: 'El parámetro materia (clave) es requerido' })
   }
 
-  const idProfesor = await obtenerIdProfesorPropio(req.user.id_usuario)
-  const [materiaRows] = await pool.query(
-    'SELECT id_materia, nombre, grupo FROM materia WHERE clave = ? AND id_profesor = ? ORDER BY fecha_creacion DESC LIMIT 1',
-    [materia, idProfesor]
-  )
-  const materiaRow = materiaRows[0]
-
-  if (!materiaRow) {
-    return res.status(404).json({ error: 'Materia no encontrada' })
+  const { materia: materiaRow, error: errorMateria } = await resolverMateriaPorClave(req.user, {
+    clave: materia,
+    idMateria: req.query.id_materia,
+    semestre: req.query.semestre,
+  })
+  if (errorMateria) {
+    return res.status(errorMateria.status).json({ error: errorMateria.mensaje })
   }
 
   const [equipos] = await pool.query(
@@ -166,7 +165,7 @@ async function listar(req, res) {
 
   res.status(200).json({
     equipos: equiposConIntegrantes,
-    materia: { id_materia: materiaRow.id_materia, clave: materia, nombre: materiaRow.nombre, grupo: materiaRow.grupo },
+    materia: { id_materia: materiaRow.id_materia, clave: materiaRow.clave, nombre: materiaRow.nombre, grupo: materiaRow.grupo, semestre: materiaRow.semestre },
   })
 }
 

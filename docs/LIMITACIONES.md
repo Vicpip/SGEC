@@ -1,46 +1,48 @@
 # Limitaciones conocidas — SGEC
 
-Documento iniciado en la Sesión 14 del plan de cierre (`PLAN-CIERRE.md`) y actualizado en la
-Sesión 15. La Sesión 17 lo completa con el resto de las limitaciones declaradas del sistema; aquí
+Documento iniciado en la Sesión 14 del plan de cierre (`PLAN-CIERRE.md`) y actualizado en las
+Sesiones 15 y 16. La Sesión 17 lo completa con el resto de las limitaciones declaradas del sistema; aquí
 están las que se confirmaron con pruebas durante esas sesiones.
 
-## 1. Las materias se resuelven por clave (y gana la más reciente)
+## 1. Una clave de materia reutilizada en otro semestre tapa a la anterior
 
-**Qué pasa.** Las pantallas de alumnos, equipos y actividades identifican la materia por su
-`clave` (`/alumnos?materia=BD2026`, `/equipos?materia=…`, `/actividades?materia=…`, y el campo
-`materia` del alta manual, la importación Excel y la baja de alumnos). El servidor busca
-`WHERE clave = ? AND id_profesor = ? ORDER BY fecha_creacion DESC LIMIT 1`. Si un mismo profesor
-tiene **dos materias con la misma clave**, todas esas rutas operan solo sobre la creada más
-recientemente; la otra queda inalcanzable desde esas pantallas (sus alumnos, equipos y actividades
-siguen en la base de datos, pero no se pueden listar ni operar). No importa el estatus: una materia
-`Cerrada` más reciente también tapa a la anterior.
+**Estado tras la Sesión 16.** El caso grave quedó corregido: un mismo profesor ya no puede tener
+dos materias con la misma clave en el mismo semestre (`POST` y `PUT /api/materias` responden 409
+con el mensaje "Ya tienes una materia con esa clave en este semestre; usa una clave distinta para
+el otro grupo (por ejemplo, agregando el grupo al final)"). Profesores distintos sí pueden usar la
+misma clave: cada uno alcanza solo la suya y sus alumnos la correcta (comprobado con sesiones de
+los tres roles; ver `docs/cierre/S16.md`). Toda búsqueda por clave pasa por
+`server/src/services/materias.service.js`, que la acota a quien llama.
 
-**Cuándo ocurre.**
-- *Misma clave, distinto grupo, mismo semestre* (el índice único de la tabla es clave + grupo +
-  semestre): **desde la Sesión 15 la API ya lo permite** — `POST /api/materias` solo responde 409
-  si se repite la combinación clave + grupo + semestre. Es decir, este caso ya es alcanzable desde
-  la interfaz: un profesor que dé de alta `BD2026` para el grupo `4CM1` y otra vez para `4CM2`
-  solo podrá operar desde las pantallas de alumnos, equipos y actividades la creada al final.
-- *Misma clave en semestres distintos* (por ejemplo, reutilizar `BD2026` el semestre siguiente):
-  ya es posible hoy. Al crear la materia nueva, la del semestre anterior deja de ser alcanzable
-  desde las pantallas de alumnos, equipos y actividades.
+**Qué sigue pasando.** Las pantallas de alumnos, equipos y actividades identifican la materia por
+su `clave` (`/alumnos?materia=BD2026`, `/equipos?materia=…`, `/actividades?materia=…`, y el campo
+`materia` del alta manual, la importación Excel y la baja de alumnos). Si un profesor **reutiliza
+una clave en otro semestre** (por ejemplo, vuelve a dar de alta `BD2026` en 2026/2), esas
+pantallas operan sobre la materia más reciente y la del semestre anterior deja de ser alcanzable
+desde ellas (sus alumnos, equipos y actividades siguen en la base de datos; no importa el
+estatus: una materia `Cerrada` más reciente también tapa a la anterior). Las rutas que reciben el
+id (`/api/materias/:id`, `/api/actividades/:id`, `/api/equipos/:id`) y los reportes (que tienen
+filtro por semestre) no tienen este problema.
 
-**Evidencia (Sesión 14, base temporal).** Con una segunda materia `BD2026` grupo `4CM9` insertada
-directamente en la base para el mismo profesor y semestre, `GET /api/materias` devolvió las dos,
-pero `GET /api/alumnos?materia=BD2026` y `GET /api/equipos?materia=BD2026` respondieron con la
-materia nueva (0 alumnos, 0 equipos) y la original (`4CM1`, 6 alumnos, 6 equipos) no se pudo
-consultar por ninguna ruta basada en clave.
+Lo mismo aplica a los datos anteriores a la corrección: si en una base ya existían dos materias
+del mismo profesor con la misma clave en el mismo semestre (era posible entre la Sesión 15 y la
+16), gana la más reciente hasta que el profesor le cambie la clave a una de las dos. Editarla sin
+cambiar la clave responde 409 precisamente para forzar ese cambio.
 
-**Por qué no se corrigió.** El arreglo real es que los selectores y las URL usen `id_materia` en
-lugar de la clave: toca cinco consultas del servidor y unas ocho pantallas del cliente. La
-decisión 6 del plan de cierre deja ese rediseño fuera del alcance.
+**Por qué no se corrigió del todo.** El arreglo completo es que los selectores y las URL del
+cliente usen `id_materia` en lugar de la clave (unas ocho pantallas). La decisión 6 del plan de
+cierre deja ese rediseño fuera del alcance. El servidor ya está preparado: todas las rutas por
+clave aceptan los parámetros opcionales `semestre` e `id_materia` para elegir la materia exacta
+(`docs/API.md`), pero el cliente todavía no los envía. El filtro por semestre de los selectores
+(Sesión 15) solo filtra la lista que se muestra.
 
-El filtro por semestre que la Sesión 15 agregó a los selectores de materia **no** resuelve esto:
-filtra la lista que se muestra, pero la materia elegida se sigue enviando al servidor por su clave.
+**Qué hacer mientras tanto.** No reutilizar una clave de un semestre a otro: incluir el periodo en
+la clave (por ejemplo `BD-2026-2`), y si se imparte la misma unidad de aprendizaje a dos grupos,
+agregar el grupo al final (`BD-2026-2-4CM1`).
 
-**Qué hacer mientras tanto.** No reutilizar una clave: usar claves que incluyan el periodo y el
-grupo (por ejemplo `BD-2026-2-4CM1`). Las rutas que ya reciben el id (`/api/materias/:id`,
-`/api/actividades/:id`, `/api/equipos/:id`, reportes) no tienen este problema.
+**Qué no es una limitación.** Un alumno inscrito en dos materias con la misma clave (de dos
+profesores) ve las actividades y avisos de ambas; cada fila indica su grupo. Ninguna pantalla del
+alumno resuelve una materia por clave.
 
 ## 2. Restablecer el acceso de un alumno que ya activó su cuenta (resuelta en la Sesión 15)
 

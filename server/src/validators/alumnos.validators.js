@@ -12,6 +12,10 @@ const crearAlumnoSchema = Joi.object({
   grupo: Joi.string().trim().max(10).required(),
   carrera: Joi.string().trim().max(100).allow('', null),
   materia: Joi.string().trim().max(20).required(),
+  // Opcionales: desambiguan la clave cuando el profesor la reutilizó en otro semestre
+  // (ver services/materias.service.js).
+  id_materia: Joi.number().integer().positive(),
+  semestre: Joi.string().trim().max(10),
 })
 
 // El correo institucional no es editable: al no estar en el schema, Joi rechaza la

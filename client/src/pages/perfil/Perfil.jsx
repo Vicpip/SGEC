@@ -184,15 +184,11 @@ export default function Perfil() {
     setGuardando(true)
     setErrorDatos('')
     try {
-      // El endpoint exige nombre y apellidos: se reenvían tal cual, sin cambios.
-      await usuariosService.actualizarUsuario(user.id_usuario, {
-        nombre: perfil.nombre,
-        apellido_paterno: perfil.apellido_paterno,
-        apellido_materno: perfil.apellido_materno ?? '',
+      const guardado = await usuariosService.actualizarMiPerfil({
         correo_alterno: correo,
         notificaciones_email: notificaciones,
       })
-      setPerfil((prev) => ({ ...prev, correo_alterno: correo || null, notificaciones_email: notificaciones }))
+      setPerfil((prev) => ({ ...prev, ...guardado }))
       setEditando(false)
       setExitoDatos('Preferencias de notificación actualizadas')
     } catch (err) {
