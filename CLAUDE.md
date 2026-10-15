@@ -366,7 +366,7 @@ aplican todas las migraciones que falten, en orden numérico: `docs/DEPLOYMENT.m
 
 | Sesión | Tema | Estado | Commit |
 |--------|------|--------|--------|
-| E1 | Ajustes de materia (migración 008) y tamaño de equipo | ✅ Completa | ver git log |
+| E1 | Ajustes de materia (migración 008) y tamaño de equipo | ✅ Completa | 2e1123d |
 
 Siguientes etapas (sesiones posteriores): aplicar `regla_repeticion` (Etapa 1b) y los tipos activos
 `usa_*` (Etapa 2); hoy solo se guardan.
