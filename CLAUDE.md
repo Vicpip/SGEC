@@ -328,7 +328,7 @@ instrucciones originales en `docs/historial-sesiones.md`.
 | S14 | ABC completo y tipo de evaluación | ✅ Completa | 91c096d | — |
 | S15 | Equipos espejo, reporte y panel del alumno | ✅ Completa | 08a032d | b8b195c |
 | S16 | Hardening de producción | ✅ Completa | 7d6a40f | f1ed059 |
-| S17 | Cierre documental | ✅ Completa | ver `git log` ("docs: sesión 17 - cierre documental") | — |
+| S17 | Cierre documental | ✅ Completa | ee0b5d2 | — |
 
 Migraciones: `002` (S13), `003` (S14), `004` (S15) y `005` (S16) se aplican, en ese orden, en
 toda base existente al desplegar (sin la 005 toda ruta autenticada responde 500). Después se

@@ -39,7 +39,7 @@ se hicieron al principio de la siguiente, en un commit propio.
 | S14 | ABC completo y tipo de evaluación | 91c096d | — |
 | S15 | Equipos espejo, reporte y panel del alumno | 08a032d | b8b195c (al inicio de S16) |
 | S16 | Hardening de producción | 7d6a40f | f1ed059 (al inicio de S17) |
-| S17 | Cierre documental | ver `CLAUDE.md` | — |
+| S17 | Cierre documental | ee0b5d2 | — |
 
 ---
 
