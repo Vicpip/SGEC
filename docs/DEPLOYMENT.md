@@ -179,6 +179,7 @@ existía necesita las migraciones de `server/db/migrations/` aplicadas a mano, e
 | `003_tipo_evaluacion_y_baja_alumno.sql` | 14 | `actividad.tipo_evaluacion` y `materia_alumno.activo` | `node server/db/migrations/aplicar_003.js` (idempotente columna por columna) |
 | `004_equipo_espejo.sql` | 15 | `equipo.id_equipo_espejo` (columna, índice y llave foránea) y el emparejamiento de los equipos Práctica/Tarea existentes | `node server/db/migrations/aplicar_004.js` (idempotente paso por paso; al terminar lista los equipos que quedaron sin espejo y los pares con integrantes distintos, para revisarlos a mano) |
 | `005_contrasena_cambiada_en.sql` | 16 | `usuario.contrasena_cambiada_en` (momento del último cambio de contraseña; los tokens anteriores se rechazan) | `node server/db/migrations/aplicar_005.js` (idempotente) |
+| `008_materia_ajustes_equipos.sql` | E1 (rama `feature/equipos-configurables`) | Configuración de equipos en `materia`: `equipo_tamano_auto`, `equipo_min`, `equipo_max`, `regla_repeticion`, `usa_practica`, `usa_tarea`, `usa_proyecto`, con valores por defecto que reproducen el comportamiento anterior | `node server/db/migrations/aplicar_008.js` (idempotente columna por columna). Va en el checklist de la actualización que lleve esta rama, no en el de S16 |
 
 Con Docker, desde la carpeta del repo en el servidor:
 
@@ -188,6 +189,15 @@ docker compose exec server node db/migrations/aplicar_003.js
 docker compose exec server node db/migrations/aplicar_004.js
 docker compose exec server node db/migrations/aplicar_005.js
 ```
+
+**Numeración y orden.** Los números 006 y 007 están reservados para la rama `feature/pwa-avisos`
+(S18 y S19); la rama `feature/equipos-configurables` usa la 008. No hay tabla de control de
+migraciones: cada `aplicar_00X.js` es independiente, idempotente y dice "no se hizo nada" si ya
+estaba aplicada, y 006/007 tocan tablas distintas de las de la 008, así que las ramas se pueden
+fusionar en cualquier orden y un hueco en la numeración (por ejemplo, la 008 en producción antes
+que la 006) no rompe nada. La regla para cada actualización es: **aplica todas las migraciones
+presentes en `server/db/migrations/` que falten, en orden numérico**. Sin la 008, el código de E1
+responde 500 en materias y equipos (leen las columnas nuevas de `materia`).
 
 Después de migrar, compara la base contra una creada con el `schema.sql` del repositorio:
 `node server/db/comparar_esquema.js <base_migrada> <base_nueva>` (solo lectura; tablas,

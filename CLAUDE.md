@@ -86,7 +86,7 @@ sgec/
 │   │   ├── hooks/              useAuth, useSelectorMateria
 │   │   ├── context/            AuthContext
 │   │   ├── services/           api.js (axios) + un *.service.js por módulo
-│   │   ├── utils/              roleRoutes.js (pantalla de inicio por rol)
+│   │   ├── utils/              roleRoutes.js (pantalla de inicio por rol), rangoIntegrantes.js
 │   │   ├── router/             React Router — todas las rutas y su protección por rol
 │   │   └── main.jsx
 │   ├── Dockerfile, nginx-spa.conf   Imagen de producción (Nginx interno: solo estáticos)
@@ -110,7 +110,7 @@ sgec/
 │   ├── db/
 │   │   ├── schema.sql          DDL completo de las 16 tablas — fuente de verdad del modelo
 │   │   ├── seeds/              Datos de demo (00 a 11) y run_seeds.js, que los carga en orden
-│   │   ├── migrations/         002 a 005 (.sql) y su aplicar_00X.js idempotente
+│   │   ├── migrations/         002 a 005 y 008 (.sql) y su aplicar_00X.js idempotente
 │   │   ├── create_admin.js     Crea el Administrador inicial de producción
 │   │   └── comparar_esquema.js Compara el esquema de dos bases (solo lectura)
 │   ├── uploads/                Archivos subidos — no versionar
@@ -169,7 +169,7 @@ Ver DDL completo en `server/db/schema.sql`.
 | `profesor` | Extiende `usuario`: no_empleado, departamento |
 | `alumno` | Extiende `usuario`: boleta, grupo, carrera (`carrera` es nullable) |
 | `semestre` | Período académico (ej. 2026/1) |
-| `materia` | Unidad de aprendizaje por semestre y profesor. Borrado lógico vía `estatus ENUM('Activa','En curso','Cerrada')` — no tiene campo `activo` |
+| `materia` | Unidad de aprendizaje por semestre y profesor. Borrado lógico vía `estatus ENUM('Activa','En curso','Cerrada')` — no tiene campo `activo`. En la rama `feature/equipos-configurables` (migración 008) agrega la configuración de equipos: `equipo_tamano_auto` (3), `equipo_min` (3), `equipo_max` (4), `regla_repeticion ENUM('B','A')` ('B') y `usa_practica`/`usa_tarea`/`usa_proyecto` (TRUE); por ahora solo el tamaño tiene efecto |
 | `materia_alumno` | Inscripción alumno–materia. Baja lógica con `activo` (reinscribir reactiva la misma fila). Toda consulta de "está inscrito" exige `activo = TRUE` |
 | `equipo` | Grupo colaborativo por tipo (`Practica`, `Tarea`, `Proyecto`). `id_equipo_espejo INT NULL` (auto-FK) enlaza la fila de Práctica con su gemela de Tarea; NULL en Proyecto |
 | `equipo_alumno` | Integrantes del equipo |
@@ -185,7 +185,10 @@ Ver DDL completo en `server/db/schema.sql`.
 ## Reglas de negocio críticas
 
 - La asignación automática forma equipos de exactamente **3 integrantes** y reporta a los 1–2
-  sobrantes (`sin_asignar`); el alta y la edición manual admiten **3 o 4**.
+  sobrantes (`sin_asignar`); el alta y la edición manual admiten **3 o 4**. En la rama
+  `feature/equipos-configurables` esos números son la configuración por defecto de cada materia
+  (`equipo_tamano_auto`, `equipo_min`, `equipo_max`, de 1 a 10); solo se cambian sin equipos
+  activos, salvo ampliar el máximo (409 en otro caso).
 - Un alumno **no puede estar en dos equipos activos del mismo tipo** dentro de la misma materia,
   y Práctica y Tarea cuentan como un solo tipo (`tiposEspejo()`). Proyecto se valida aparte: un
   alumno sí puede tener equipo de Práctica/Tarea y de Proyecto a la vez, incluso con los mismos
@@ -355,5 +358,19 @@ compara el esquema con `server/db/comparar_esquema.js`. Todo está en
 Funcionalidades nuevas planeadas después del cierre (S18 PWA y notificaciones push, S19 avisos
 de alumnos): se trabajan en la rama `feature/pwa-avisos` según `PLAN-CIERRE.md` y solo se
 fusionan si pasan su propio checklist.
+
+**Equipos configurables por materia** — rama `feature/equipos-configurables` (desde `main`, sin
+fusionar). Resumen de cada sesión en `docs/cierre/E<N>.md`. Migración **008** (la 006 y la 007 son
+de `feature/pwa-avisos`; las ramas se fusionan en cualquier orden y en cada actualización se
+aplican todas las migraciones que falten, en orden numérico: `docs/DEPLOYMENT.md`).
+
+| Sesión | Tema | Estado | Commit |
+|--------|------|--------|--------|
+| E1 | Ajustes de materia (migración 008) y tamaño de equipo | ✅ Completa | ver git log |
+
+Siguientes etapas (sesiones posteriores): aplicar `regla_repeticion` (Etapa 1b) y los tipos activos
+`usa_*` (Etapa 2); hoy solo se guardan.
+
+Bases temporales de E1 para borrado manual: `sgec_eq_tmp`, `sgec_eq_sep`, `sgec_eq_parcial`.
 
 Limitaciones conocidas: `docs/LIMITACIONES.md` (15 puntos, con resumen al inicio).

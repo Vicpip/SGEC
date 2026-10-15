@@ -3,7 +3,7 @@
 // URL: /equipos/:id
 // Descripción: Integrantes del equipo y sus calificaciones por actividad. Editar o desactivar
 // un equipo de Práctica o de Tarea se aplica también a su equipo espejo (id_equipo_espejo).
-// Admite 3 o 4 integrantes. Esta vista es
+// El número de integrantes lo define la materia (3 o 4 por defecto). Esta vista es
 // SOLO LECTURA para calificaciones — el registro y ajuste ocurre únicamente en
 // BandejaEntregas.jsx (Sesión 9, fuente canónica).
 
@@ -18,6 +18,7 @@ import EmptyState from '../../components/ui/EmptyState'
 import * as equiposService from '../../services/equipos.service'
 import * as alumnosService from '../../services/alumnos.service'
 import * as calificacionesService from '../../services/calificaciones.service'
+import { rangoIntegrantes, textoRango } from '../../utils/rangoIntegrantes'
 
 const TIPO_ACTIVIDAD_VARIANT = { 'En clase': 'gray', Practica: 'blue', Tarea: 'navy', Proyecto: 'orange' }
 const TIPO_ACTIVIDAD_LABEL = { 'En clase': 'En clase', Practica: 'Práctica', Tarea: 'Tarea', Proyecto: 'Proyecto' }
@@ -25,8 +26,6 @@ const TIPO_ACTIVIDAD_LABEL = { 'En clase': 'En clase', Practica: 'Práctica', Ta
 const TIPO_VARIANT = { Practica: 'blue', Tarea: 'navy', Proyecto: 'orange' }
 const TIPO_LABEL = { Practica: 'Práctica', Tarea: 'Tarea', Proyecto: 'Proyecto' }
 const TIPOS_ESPEJO = ['Practica', 'Tarea']
-const INTEGRANTES_MIN = 3
-const INTEGRANTES_MAX = 4
 
 function tiposExcluidos(tipo) {
   return TIPOS_ESPEJO.includes(tipo) ? TIPOS_ESPEJO : [tipo]
@@ -52,6 +51,8 @@ export default function DetalleEquipo() {
   const [guardando, setGuardando] = useState(false)
   const [actividadesCalificadas, setActividadesCalificadas] = useState([])
   const [confirmarBaja, setConfirmarBaja] = useState(false)
+  // Rango de integrantes de la materia del equipo (GET /equipos/:id lo trae; 3 a 4 por defecto).
+  const rango = rangoIntegrantes(equipo)
 
   async function handleConfirmarDesactivar() {
     await equiposService.desactivarEquipo(equipo.id_equipo)
@@ -120,14 +121,14 @@ export default function DetalleEquipo() {
   function toggleSeleccion(idAlumno) {
     setSeleccion((prev) => {
       if (prev.includes(idAlumno)) return prev.filter((id) => id !== idAlumno)
-      if (prev.length >= INTEGRANTES_MAX) return prev
+      if (prev.length >= rango.max) return prev
       return [...prev, idAlumno]
     })
   }
 
   async function handleGuardar() {
-    if (!nombreEdit.trim() || seleccion.length < INTEGRANTES_MIN || seleccion.length > INTEGRANTES_MAX) {
-      setError('El equipo necesita un nombre y 3 o 4 integrantes')
+    if (!nombreEdit.trim() || seleccion.length < rango.min || seleccion.length > rango.max) {
+      setError(`El equipo necesita un nombre y ${textoRango(rango)} integrantes`)
       return
     }
     setGuardando(true)
@@ -260,7 +261,7 @@ export default function DetalleEquipo() {
                   }}
                 >
                   Los cambios de nombre e integrantes se aplican también a su equipo de{' '}
-                  {equipo.tipo === 'Practica' ? 'Tarea' : 'Práctica'}: ambos comparten integrantes. Elige 3 o 4 alumnos.
+                  {equipo.tipo === 'Practica' ? 'Tarea' : 'Práctica'}: ambos comparten integrantes. Elige {textoRango(rango)} alumnos.
                 </div>
               )}
               <div className="form-group">
@@ -308,7 +309,7 @@ export default function DetalleEquipo() {
                 <button
                   className="btn btn-primary"
                   onClick={handleGuardar}
-                  disabled={guardando || seleccion.length < INTEGRANTES_MIN || seleccion.length > INTEGRANTES_MAX}
+                  disabled={guardando || seleccion.length < rango.min || seleccion.length > rango.max}
                 >
                   {guardando ? <Loader2 className="icon-sm spin" /> : <Check className="icon-sm" />}
                   Guardar cambios

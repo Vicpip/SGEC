@@ -190,6 +190,38 @@ alumnos y B6 formaría 2 equipos sin sobrantes).
   `https://`.
 - [ ] **D6. Errores.** En ningún momento apareció un error 500 ni una pantalla en blanco.
 
+## E. Equipos configurables (solo si se despliega la rama `feature/equipos-configurables`)
+
+Bloque de la sesión E1. La lógica se probó por la API contra una base temporal (53
+comprobaciones, `docs/cierre/E1.md`); **ninguna de estas pantallas se abrió en el navegador**.
+Requiere la migración 008 aplicada. Con el profesor de demostración y una materia de prueba nueva
+con al menos 9 alumnos.
+
+- [ ] **E1. Formulario de materias.** Materias → Nueva materia → al final aparece "Configuración
+  de equipos", plegada, con el resumen "(equipos de 3; de 3 a 4 integrantes)". Al abrirla: tamaño
+  automático 3, mínimo 3, máximo 4; la regla de repetición y las casillas de tipos (Práctica,
+  Tarea, Proyecto, las tres marcadas) se ven deshabilitadas y marcadas "(próximamente)". Como
+  **Administrador**, el mismo formulario **no** muestra la sección.
+- [ ] **E2. Validación en el formulario.** Poner mínimo 5 con tamaño 3 y guardar → no se guarda;
+  la sección se abre y aparece "Configuración de equipos: debe cumplirse 1 ≤ mínimo ≤ tamaño
+  automático ≤ máximo ≤ 10".
+- [ ] **E3. Tamaño 4 sin equipos.** Editar la materia de prueba (sin equipos) → tamaño 4, mínimo 4,
+  máximo 5 → se guarda y el resumen dice "(equipos de 4; de 4 a 5 integrantes)". Equipos →
+  asignación aleatoria de Práctica → equipos de 4; si sobran alumnos, el aviso dice "La asignación
+  automática forma equipos de 4 … un equipo admite hasta 5 integrantes".
+- [ ] **E4. Crear equipo.** Crear Equipo con esa materia → "Número de integrantes" dice
+  "(mínimo 4, máximo 5)"; "Asignar aleatoriamente" elige 4; no deja marcar un sexto; con 3 el botón
+  Guardar queda deshabilitado; el texto de ayuda dice "Selecciona 4 o 5 integrantes…".
+- [ ] **E5. Editar equipo.** Detalle de un equipo de Práctica de esa materia → Editar → el aviso
+  dice "Elige 4 o 5 alumnos"; no deja pasar de 5; con 3 el botón Guardar queda deshabilitado.
+- [ ] **E6. Cambiar la configuración con equipos.** Editar la materia → en la sección aparece el
+  aviso de equipos activos; tamaño y mínimo están deshabilitados. Ampliar el máximo a 6 → se
+  guarda. Volver a editar y bajarlo a 5 → el navegador no deja guardar (el campo no admite un
+  valor menor que el máximo actual). Si la petición llegara al servidor, respondería 409
+  "Desactiva los equipos de esta materia antes de cambiar su configuración" (probado por la API).
+- [ ] **E7. Materias anteriores.** Una materia que existía antes de la migración → la sección
+  muestra 3, 3 y 4, y Equipos se comporta como en B6 y B7.
+
 ---
 
 ## Resultados
@@ -200,6 +232,7 @@ alumnos y B6 formaría 2 equipos sin sobrantes).
 | B. Profesor | | | | |
 | C. Alumno | | | | |
 | D. Transversales | | | | |
+| E. Equipos configurables (rama) | | | | |
 
 Las limitaciones ya conocidas (por ejemplo, que los adjuntos de una actividad no se editan o que
 las contraseñas temporales no caducan) están en `docs/LIMITACIONES.md`: no son fallas de esta

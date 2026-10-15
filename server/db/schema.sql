@@ -84,6 +84,20 @@ CREATE TABLE materia (
   id_profesor  INT NOT NULL,
   estatus      ENUM('Activa', 'En curso', 'Cerrada') NOT NULL DEFAULT 'Activa',
   fecha_creacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  -- Configuración de equipos que define el profesor (migración 008). Los valores por
+  -- defecto reproducen el comportamiento original: asignación automática de 3 en 3, alta y
+  -- edición manual con 3 o 4 integrantes. Solo se cambian sin equipos activos (el máximo
+  -- también se puede ampliar con equipos activos).
+  equipo_tamano_auto TINYINT UNSIGNED NOT NULL DEFAULT 3,
+  equipo_min         TINYINT UNSIGNED NOT NULL DEFAULT 3,
+  equipo_max         TINYINT UNSIGNED NOT NULL DEFAULT 4,
+  -- Regla de repetición de alumnos: 'B' = no repetir dentro del mismo tipo (Práctica y Tarea
+  -- cuentan como uno); 'A' = no repetir entre bloques de equipos. Todavía solo se guarda.
+  regla_repeticion   ENUM('B', 'A') NOT NULL DEFAULT 'B',
+  -- Tipos de equipo que usa la materia. Todavía solo se guardan.
+  usa_practica       BOOLEAN NOT NULL DEFAULT TRUE,
+  usa_tarea          BOOLEAN NOT NULL DEFAULT TRUE,
+  usa_proyecto       BOOLEAN NOT NULL DEFAULT TRUE,
   CONSTRAINT fk_materia_semestre FOREIGN KEY (id_semestre) REFERENCES semestre(id_semestre),
   CONSTRAINT fk_materia_profesor FOREIGN KEY (id_profesor) REFERENCES profesor(id_profesor),
   UNIQUE KEY uk_materia_clave_grupo_semestre (clave, grupo, id_semestre)

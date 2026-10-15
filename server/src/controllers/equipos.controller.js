@@ -1,7 +1,9 @@
-// Equipos colaborativos (sin repetición por tipo). Pantallas 04, 05, 06.
+// Equipos colaborativos (un alumno no repite dentro de un mismo tipo). Pantallas 04, 05, 06.
 //
-// Tamaño: la asignación automática forma equipos de exactamente 3; el alta y la edición
-// manual admiten 3 o 4 integrantes (lo valida equipos.validators.js).
+// Tamaño: lo define cada materia (migración 008). La asignación automática forma equipos de
+// exactamente materia.equipo_tamano_auto; el alta y la edición manual admiten entre
+// materia.equipo_min y materia.equipo_max integrantes (3, 3 y 4 por defecto). Joi solo acota
+// a 1–10 (equipos.validators.js); el rango de la materia se comprueba aquí.
 //
 // Espejo Práctica/Tarea: un equipo de Práctica o de Tarea existe como dos filas de `equipo`
 // (una por tipo, mismos integrantes) enlazadas por equipo.id_equipo_espejo. Toda escritura
@@ -79,7 +81,8 @@ async function idsAlumnosConEquipoDeTipo(idMateria, tipo, idsExcluidos = []) {
 // en cuenta si pertenece a la misma materia (defensa ante un enlace corrupto).
 async function obtenerEquipoParaEscritura(id) {
   const [rows] = await pool.query(
-    `SELECT eq.id_equipo, eq.id_materia, eq.nombre, eq.tipo, eq.id_equipo_espejo, eq.activo, m.id_profesor
+    `SELECT eq.id_equipo, eq.id_materia, eq.nombre, eq.tipo, eq.id_equipo_espejo, eq.activo, m.id_profesor,
+            m.equipo_min, m.equipo_max
      FROM equipo eq JOIN materia m ON m.id_materia = eq.id_materia
      WHERE eq.id_equipo = ?`,
     [id]
@@ -96,6 +99,17 @@ async function obtenerEquipoParaEscritura(id) {
     if (espejoRows.length > 0) ids.push(espejoRows[0].id_equipo)
   }
   return { equipo, ids }
+}
+
+// Mensaje de error si el número de integrantes queda fuera del rango de la materia; null si
+// está dentro.
+function errorNumeroIntegrantes(cantidad, materia) {
+  const min = Number(materia.equipo_min)
+  const max = Number(materia.equipo_max)
+  if (cantidad >= min && cantidad <= max) return null
+  return min === max
+    ? `Un equipo de esta materia debe tener exactamente ${min} integrante${min === 1 ? '' : 's'}`
+    : `Un equipo de esta materia debe tener entre ${min} y ${max} integrantes`
 }
 
 async function nombresDeAlumnos(idsAlumno) {
@@ -165,7 +179,16 @@ async function listar(req, res) {
 
   res.status(200).json({
     equipos: equiposConIntegrantes,
-    materia: { id_materia: materiaRow.id_materia, clave: materiaRow.clave, nombre: materiaRow.nombre, grupo: materiaRow.grupo, semestre: materiaRow.semestre },
+    materia: {
+      id_materia: materiaRow.id_materia,
+      clave: materiaRow.clave,
+      nombre: materiaRow.nombre,
+      grupo: materiaRow.grupo,
+      semestre: materiaRow.semestre,
+      equipo_tamano_auto: materiaRow.equipo_tamano_auto,
+      equipo_min: materiaRow.equipo_min,
+      equipo_max: materiaRow.equipo_max,
+    },
   })
 }
 
@@ -174,7 +197,8 @@ async function obtener(req, res) {
 
   const [rows] = await pool.query(
     `SELECT eq.id_equipo, eq.id_materia, eq.nombre, eq.tipo, eq.id_equipo_espejo, eq.activo, eq.fecha_creacion,
-            m.id_profesor, m.clave AS materia_clave, m.nombre AS materia_nombre, m.grupo AS materia_grupo
+            m.id_profesor, m.clave AS materia_clave, m.nombre AS materia_nombre, m.grupo AS materia_grupo,
+            m.equipo_tamano_auto, m.equipo_min, m.equipo_max
      FROM equipo eq JOIN materia m ON m.id_materia = eq.id_materia
      WHERE eq.id_equipo = ?`,
     [id]
@@ -212,12 +236,17 @@ async function crear(req, res) {
   const { id_materia, nombre, tipo, integrantes } = req.body
 
   const idProfesor = await obtenerIdProfesorPropio(req.user.id_usuario)
-  const [materiaRows] = await pool.query('SELECT id_materia FROM materia WHERE id_materia = ? AND id_profesor = ?', [
-    id_materia,
-    idProfesor,
-  ])
+  const [materiaRows] = await pool.query(
+    'SELECT id_materia, equipo_min, equipo_max FROM materia WHERE id_materia = ? AND id_profesor = ?',
+    [id_materia, idProfesor]
+  )
   if (materiaRows.length === 0) {
     return res.status(404).json({ error: 'Materia no encontrada' })
+  }
+
+  const errorTamano = errorNumeroIntegrantes(integrantes.length, materiaRows[0])
+  if (errorTamano) {
+    return res.status(400).json({ error: errorTamano })
   }
 
   const [inscritos] = await pool.query('SELECT id_alumno FROM materia_alumno WHERE id_materia = ? AND activo = TRUE AND id_alumno IN (?)', [
@@ -292,6 +321,11 @@ async function actualizar(req, res) {
     return res.status(403).json({ error: 'No tienes permiso para editar este equipo' })
   }
 
+  const errorTamano = errorNumeroIntegrantes(integrantes.length, equipo)
+  if (errorTamano) {
+    return res.status(400).json({ error: errorTamano })
+  }
+
   const [inscritos] = await pool.query('SELECT id_alumno FROM materia_alumno WHERE id_materia = ? AND activo = TRUE AND id_alumno IN (?)', [
     equipo.id_materia,
     integrantes,
@@ -359,22 +393,24 @@ async function desactivar(req, res) {
   res.status(200).json({ message: 'Equipo desactivado', equipos_desactivados: ids })
 }
 
-// Asignación aleatoria masiva: forma equipos de 3 con los alumnos inscritos en la materia
-// que todavía no tienen equipo del tipo indicado (Practica/Tarea comparten integrantes y se
-// crean como par enlazado por id_equipo_espejo, ver asignacion.service.js). Si sobran 1 o 2
-// alumnos tras agrupar de 3 en 3, quedan sin asignar y se reportan en `sin_asignar` — el
-// profesor los agrega a mano a un equipo existente (el alta/edición manual admite 4).
+// Asignación aleatoria masiva: forma equipos de materia.equipo_tamano_auto integrantes (3 por
+// defecto) con los alumnos inscritos en la materia que todavía no tienen equipo del tipo
+// indicado (Practica/Tarea comparten integrantes y se crean como par enlazado por
+// id_equipo_espejo, ver asignacion.service.js). Los alumnos que sobran tras agrupar quedan sin
+// asignar y se reportan en `sin_asignar` — el profesor los agrega a mano a un equipo
+// existente (el alta/edición manual admite hasta materia.equipo_max).
 async function generar(req, res) {
   const { id_materia, tipo } = req.body
 
   const idProfesor = await obtenerIdProfesorPropio(req.user.id_usuario)
-  const [materiaRows] = await pool.query('SELECT id_materia FROM materia WHERE id_materia = ? AND id_profesor = ?', [
-    id_materia,
-    idProfesor,
-  ])
+  const [materiaRows] = await pool.query(
+    'SELECT id_materia, equipo_tamano_auto FROM materia WHERE id_materia = ? AND id_profesor = ?',
+    [id_materia, idProfesor]
+  )
   if (materiaRows.length === 0) {
     return res.status(404).json({ error: 'Materia no encontrada' })
   }
+  const tamano = Number(materiaRows[0].equipo_tamano_auto)
 
   const [inscritosRows] = await pool.query('SELECT id_alumno FROM materia_alumno WHERE id_materia = ? AND activo = TRUE', [id_materia])
   const idsInscritos = inscritosRows.map((r) => r.id_alumno)
@@ -382,14 +418,14 @@ async function generar(req, res) {
   const idsConEquipo = await idsAlumnosConEquipoDeTipo(id_materia, tipo)
   const disponibles = idsInscritos.filter((id) => !idsConEquipo.has(id))
 
-  if (disponibles.length < 3) {
+  if (disponibles.length < tamano) {
     let mensaje
     if (idsInscritos.length === 0) {
       mensaje = 'No hay alumnos inscritos en esta materia'
     } else if (disponibles.length === 0) {
       mensaje = `No hay alumnos disponibles: todos los alumnos inscritos ya tienen equipo de tipo ${tipo} en esta materia`
     } else {
-      mensaje = `Solo hay ${disponibles.length} alumno(s) sin equipo de tipo ${tipo} en esta materia; se necesitan al menos 3 para formar un equipo`
+      mensaje = `Solo hay ${disponibles.length} alumno(s) sin equipo de tipo ${tipo} en esta materia; se necesitan al menos ${tamano} para formar un equipo`
     }
     return res.status(422).json({
       error: mensaje,
@@ -398,7 +434,7 @@ async function generar(req, res) {
     })
   }
 
-  const { grupos, sobrantes } = asignarEquiposAleatorio(disponibles)
+  const { grupos, sobrantes } = asignarEquiposAleatorio(disponibles, tamano)
   const tipos = tiposEspejo(tipo)
   const prefijo = tipo === 'Proyecto' ? 'Proyecto' : 'Equipo'
 
@@ -462,6 +498,7 @@ async function generar(req, res) {
   res.status(201).json({
     equipos: equiposCreados,
     equipos_creados: grupos.length,
+    tamano_equipo: tamano,
     alumnos_sin_asignar: sobrantes.length,
     ids_alumnos_sin_asignar: sobrantes,
     sin_asignar: await nombresDeAlumnos(sobrantes),

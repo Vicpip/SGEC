@@ -16,6 +16,7 @@ import ConfirmDialog from '../../components/ui/ConfirmDialog'
 import EmptyState from '../../components/ui/EmptyState'
 import SelectorSemestre from '../../components/ui/SelectorSemestre'
 import { useSelectorMateria } from '../../hooks/useSelectorMateria'
+import { rangoIntegrantes } from '../../utils/rangoIntegrantes'
 import * as equiposService from '../../services/equipos.service'
 
 const TIPO_VARIANT = { Practica: 'blue', Tarea: 'navy', Proyecto: 'orange' }
@@ -33,6 +34,8 @@ export default function ListaEquipos() {
   const solicitudRef = useRef(0)
 
   const [materia, setMateria] = useState(null)
+  // Tamaño automático y máximo de integrantes de la materia (3 y 4 por defecto).
+  const rango = rangoIntegrantes(materia)
   const [equipos, setEquipos] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -122,7 +125,7 @@ export default function ListaEquipos() {
       cargarEquipos()
     } catch (err) {
       setError(err.response?.data?.error || 'No se pudieron generar los equipos')
-      // Con menos de 3 alumnos disponibles el servidor dice quiénes son.
+      // Con menos alumnos disponibles que el tamaño automático el servidor dice quiénes son.
       setSinAsignar(err.response?.data?.sin_asignar ?? [])
     } finally {
       setGenerando(false)
@@ -246,8 +249,8 @@ export default function ListaEquipos() {
               {sinAsignar.length === 1 ? 'Quedó 1 alumno sin equipo' : `Quedaron ${sinAsignar.length} alumnos sin equipo`} de{' '}
               {tipoGenerar === 'Proyecto' ? 'Proyecto' : 'Práctica/Tarea'}:
             </strong>{' '}
-            {sinAsignar.map((s) => s.nombre).join(', ')}. La asignación automática forma equipos de 3; agrégalos a mano
-            a un equipo existente desde su detalle (un equipo admite hasta 4 integrantes).
+            {sinAsignar.map((s) => s.nombre).join(', ')}. La asignación automática forma equipos de {rango.tamano}; agrégalos
+            a mano a un equipo existente desde su detalle (un equipo admite hasta {rango.max} integrantes).
           </div>
         </div>
       )}

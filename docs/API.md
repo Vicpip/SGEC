@@ -96,11 +96,30 @@ cualquiera.
 
 | Método | Ruta | Rol | Body / params | Respuestas |
 |---|---|---|---|---|
-| GET | `/materias` | Profesor (las suyas) / Administrador (todas) | `?semestre=<clave>` | 200 `{materias}` (incluye `total_alumnos`, `total_equipos`) |
+| GET | `/materias` | Profesor (las suyas) / Administrador (todas) | `?semestre=<clave>` | 200 `{materias}` (incluye `total_alumnos`, `total_equipos` y la configuración de equipos) |
 | GET | `/materias/:id` | Profesor dueño / Administrador | — | 200 `{materia}`; 403; 404 |
-| POST | `/materias` | Profesor, Administrador | `{clave, nombre, grupo, id_semestre, id_profesor (requerido solo si lo crea un Administrador)}` | 201 `{materia}`; 400 semestre/profesor inexistente; 409 si ese profesor ya tiene una materia con esa clave en el semestre (aunque el grupo sea otro), o si ya existe una materia (de otro profesor) con esa clave + grupo + semestre: el controlador lo comprueba antes de insertar y el índice único `uk_materia_clave_grupo_semestre` lo respalda (mismo 409, "Ya existe una materia con la clave "…" y grupo "…" en este semestre"); 422 el semestre está inactivo ("El semestre … está inactivo: no se pueden crear materias en él") |
-| PUT | `/materias/:id` | Profesor dueño / Administrador | `{clave, nombre, grupo, id_semestre, estatus, id_profesor?}` | 200 `{message}`; 403; 404; 409 (mismas dos reglas que el alta); 422 si se intenta mover la materia a un semestre inactivo (editar una que ya está en él sí se permite) |
+| POST | `/materias` | Profesor, Administrador | `{clave, nombre, grupo, id_semestre, id_profesor (requerido solo si lo crea un Administrador)}` + configuración de equipos opcional (abajo) | 201 `{materia}` (con la configuración que quedó guardada); 400 semestre/profesor inexistente o configuración de equipos inválida; 409 si ese profesor ya tiene una materia con esa clave en el semestre (aunque el grupo sea otro), o si ya existe una materia (de otro profesor) con esa clave + grupo + semestre: el controlador lo comprueba antes de insertar y el índice único `uk_materia_clave_grupo_semestre` lo respalda (mismo 409, "Ya existe una materia con la clave "…" y grupo "…" en este semestre"); 422 el semestre está inactivo ("El semestre … está inactivo: no se pueden crear materias en él") |
+| PUT | `/materias/:id` | Profesor dueño / Administrador | `{clave, nombre, grupo, id_semestre, estatus, id_profesor?}` + configuración de equipos opcional (los campos que no vengan conservan su valor) | 200 `{message}`; 400 configuración de equipos inválida; 403; 404; 409 (mismas dos reglas que el alta, o cambio de configuración con equipos activos); 422 si se intenta mover la materia a un semestre inactivo (editar una que ya está en él sí se permite) |
 | PATCH | `/materias/:id/desactivar` | Profesor dueño / Administrador | — | 200 `{message}` (`estatus = 'Cerrada'`); 403; 404 |
+
+**Configuración de equipos** (migración 008). Campos opcionales en `POST` y `PUT`, y presentes en `GET`:
+
+| Campo | Valores | Por defecto | Efecto |
+|---|---|---|---|
+| `equipo_tamano_auto` | entero 1–10 | 3 | Tamaño de los equipos de `POST /equipos/generar` |
+| `equipo_min`, `equipo_max` | enteros 1–10 | 3, 4 | Rango de integrantes en `POST` y `PUT /equipos` |
+| `regla_repeticion` | `B` / `A` | `B` | Solo se guarda (sin efecto todavía). `B` = no repetir dentro del mismo tipo, el comportamiento actual; `A` = no repetir entre bloques de equipos |
+| `usa_practica`, `usa_tarea`, `usa_proyecto` | booleanos | `true` | Solo se guardan (sin efecto todavía) |
+
+Los valores por defecto reproducen el comportamiento anterior. 400 (Joi, `{message, errores}`) si un
+campo está fuera de su rango o tipo; 400 `{error}` "La configuración de equipos no es válida: debe
+cumplirse 1 ≤ mínimo ≤ tamaño automático ≤ máximo ≤ 10" o "La materia debe usar al menos un tipo de
+equipo" (la coherencia se comprueba después de combinar lo recibido con los valores vigentes). Con
+algún equipo activo en la materia, cambiar `equipo_tamano_auto`, `equipo_min` o `regla_repeticion`, o
+bajar `equipo_max`, responde 409 "Desactiva los equipos de esta materia antes de cambiar su
+configuración"; ampliar `equipo_max` y reenviar los mismos valores sí se permiten, y los `usa_*` se
+guardan sin restricción. El Administrador usa el mismo `PUT` sin estos campos y la configuración se
+conserva.
 
 **Clave de materia.** La clave no es única en el sistema: profesores distintos pueden usar la
 misma en un semestre siempre que el grupo sea distinto (clave + grupo + semestre sí es única), y
@@ -166,18 +185,21 @@ Escritura: solo Profesor.
 
 | Método | Ruta | Rol | Body / params | Respuestas |
 |---|---|---|---|---|
-| GET | `/equipos?materia=<clave>` | Profesor / Alumno (ignora `materia`, siempre los suyos) | opcionales `&semestre=` / `&id_materia=` (Profesor) | 200 `{equipos, materia?}` (con integrantes) |
-| GET | `/equipos/:id` | Profesor dueño / Alumno integrante | — | 200 `{equipo}`; 403; 404 |
-| POST | `/equipos` | Profesor | `{id_materia, nombre, tipo: Practica|Tarea|Proyecto, integrantes: [3 o 4 ids únicos]}` | 201 `{equipo, equipo_espejo}` (`equipo_espejo` = `{id_equipo, tipo}` de la fila gemela, o `null` en Proyecto); 400 menos de 3, más de 4, repetidos o integrante no inscrito; 404 materia no propia; 409 integrante ya tiene un equipo activo de ese tipo en la materia (Práctica y Tarea cuentan como uno; Proyecto se valida aparte) |
-| POST | `/equipos/generar` | Profesor | `{id_materia, tipo}` | 201 `{equipos, equipos_creados, alumnos_sin_asignar, ids_alumnos_sin_asignar, sin_asignar: [{id_alumno, nombre}]}`; 404 materia no propia; 422 `{error, alumnos_disponibles, sin_asignar}` con menos de 3 alumnos disponibles |
-| PUT | `/equipos/:id` | Profesor dueño | `{nombre, integrantes: [3 o 4 ids únicos]}` | 200 `{message, equipos_actualizados: [ids]}`; 400; 403; 404; 409 |
+| GET | `/equipos?materia=<clave>` | Profesor / Alumno (ignora `materia`, siempre los suyos) | opcionales `&semestre=` / `&id_materia=` (Profesor) | 200 `{equipos, materia?}` (con integrantes; `materia` incluye `equipo_tamano_auto`, `equipo_min`, `equipo_max`) |
+| GET | `/equipos/:id` | Profesor dueño / Alumno integrante | — | 200 `{equipo}` (incluye `equipo_tamano_auto`, `equipo_min`, `equipo_max` de su materia); 403; 404 |
+| POST | `/equipos` | Profesor | `{id_materia, nombre, tipo: Practica|Tarea|Proyecto, integrantes: [ids únicos, entre equipo_min y equipo_max de la materia]}` | 201 `{equipo, equipo_espejo}` (`equipo_espejo` = `{id_equipo, tipo}` de la fila gemela, o `null` en Proyecto); 400 fuera del rango de la materia ("Un equipo de esta materia debe tener entre … y … integrantes"), vacío o más de 10 (Joi), repetidos o integrante no inscrito; 404 materia no propia; 409 integrante ya tiene un equipo activo de ese tipo en la materia (Práctica y Tarea cuentan como uno; Proyecto se valida aparte) |
+| POST | `/equipos/generar` | Profesor | `{id_materia, tipo}` | 201 `{equipos, equipos_creados, tamano_equipo, alumnos_sin_asignar, ids_alumnos_sin_asignar, sin_asignar: [{id_alumno, nombre}]}`; 404 materia no propia; 422 `{error, alumnos_disponibles, sin_asignar}` con menos alumnos disponibles que `equipo_tamano_auto` |
+| PUT | `/equipos/:id` | Profesor dueño | `{nombre, integrantes: [ids únicos, entre equipo_min y equipo_max de la materia]}` | 200 `{message, equipos_actualizados: [ids]}`; 400; 403; 404; 409 |
 | PATCH | `/equipos/:id/desactivar` | Profesor dueño | — | 200 `{message, equipos_desactivados: [ids]}`; 403; 404 |
 
 **Espejo Práctica/Tarea.** Un equipo de Práctica o de Tarea son dos filas de `equipo` (una por tipo, mismos
 integrantes) enlazadas por `id_equipo_espejo`, que viene en el listado y en el detalle (`null` en Proyecto).
 `POST /equipos` crea las dos filas; `PUT` y `PATCH …/desactivar` se pueden invocar con el id de cualquiera de
-las dos y operan sobre ambas en una sola transacción. `/equipos/generar` siempre forma equipos de exactamente 3;
-los 1–2 alumnos que sobran vuelven en `sin_asignar` y se agregan a mano (el alta/edición manual admite 4).
+las dos y operan sobre ambas en una sola transacción. `/equipos/generar` forma equipos de exactamente
+`equipo_tamano_auto` integrantes (3 por defecto); los que sobran vuelven en `sin_asignar` y se agregan a mano
+(el alta/edición manual admite hasta `equipo_max`, 4 por defecto). El rango de la materia se comprueba después
+de la propiedad: con una materia o un equipo ajenos la respuesta es 404 (alta) o 403 (edición) aunque el número
+de integrantes sea inválido.
 
 `Practica` y `Tarea` son tipos espejo: `generar` sobre cualquiera de los dos crea ambas filas de
 `equipo` con los mismos integrantes en una sola pasada. `Proyecto` se reagrupa de forma

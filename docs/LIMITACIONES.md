@@ -188,10 +188,20 @@ Fuera del alcance del cierre, documentado como trabajo futuro:
 
 - **Tipos de equipo fijos.** Los tipos (`Practica`, `Tarea`, `Proyecto`) son un `ENUM` del
   esquema, igual para todas las materias; qué tipos comparten integrantes está fijo en el código
-  (`tiposEspejo()` en `asignacion.service.js`); el tamaño es 3 en la asignación automática y 3 o 4
-  en la manual. Una versión configurable por materia (tipos, cuáles comparten integrantes, tamaño
-  de 1 a N o trabajo individual, y la regla de repetición de §7) exige rediseñar el modelo de
-  datos.
+  (`tiposEspejo()` en `asignacion.service.js`). Una versión configurable por materia (tipos,
+  cuáles comparten integrantes, trabajo individual y la regla de repetición de §7) se está
+  haciendo por etapas en la rama `feature/equipos-configurables` (sin fusionar a `main`):
+  - **Hecho en E1 (migración 008):** el **tamaño** es configurable por materia
+    (`materia.equipo_tamano_auto`, `equipo_min`, `equipo_max`, de 1 a 10; por defecto 3 en la
+    asignación automática y 3 o 4 en la manual, como antes). Solo se cambia sin equipos activos;
+    el máximo también se puede ampliar con equipos activos.
+  - **Guardado, sin efecto todavía:** `materia.regla_repeticion` (`B` por defecto = la regla
+    actual; `A` = no repetir entre bloques) y `usa_practica`, `usa_tarea`, `usa_proyecto` (los
+    tres TRUE). El formulario de materias los muestra deshabilitados ("próximamente"); el sistema
+    sigue aplicando la regla B y los tres tipos en todas las materias.
+  - **Pendiente:** aplicar la regla A (Etapa 1b), los tipos activos (Etapa 2) y el trabajo
+    individual (Etapa 3). La lectura A "estricta" (que Práctica y Tarea tampoco compartan
+    alumnos) obligaría a dejar de crear el equipo espejo y no está planeada.
 - **El grupo del Excel no se valida contra la materia.** `excel.service.js` exige que la columna
   `grupo` venga llena, pero no comprueba que coincida con el grupo de la materia a la que se
   importa: un alumno de 4CM2 puede quedar inscrito en una materia de 4CM1 si así viene en el

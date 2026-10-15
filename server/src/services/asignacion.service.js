@@ -1,5 +1,5 @@
-// Algoritmo de asignación aleatoria de integrantes a equipos de 3, sin repetición
-// de compañeros por tipo de equipo (Práctica, Tarea, Proyecto) dentro de la misma materia.
+// Algoritmo de asignación aleatoria de integrantes a equipos, sin repetición de alumnos
+// dentro de un mismo tipo de equipo (Práctica y Tarea cuentan como uno) en la misma materia.
 //
 // Los equipos 'Practica' y 'Tarea' comparten integrantes (ver CLAUDE.md — reglas críticas):
 // cada equipo de esos tipos existe como DOS filas de `equipo` (una por tipo, mismos
@@ -8,15 +8,19 @@
 // equipos.controller.js). 'Proyecto' se asigna de forma independiente, con su propia
 // reagrupación, y no tiene espejo.
 //
-// Tamaño de los equipos: la asignación automática siempre forma equipos de exactamente 3 y
-// reporta los 1–2 alumnos sobrantes; el alta y la edición manual admiten 3 o 4 integrantes
-// para que el profesor pueda absorber a esos sobrantes.
+// Tamaño de los equipos: lo define cada materia (materia.equipo_tamano_auto, equipo_min y
+// equipo_max, migración 008). La asignación automática forma equipos de exactamente
+// equipo_tamano_auto y reporta los sobrantes; el alta y la edición manual admiten entre
+// equipo_min y equipo_max integrantes para que el profesor pueda absorber a esos sobrantes.
+// Las constantes de abajo son los valores por defecto de esas columnas (3, 3 y 4).
 
 const TIPOS_ESPEJO = ['Practica', 'Tarea']
 
 const TAMANO_EQUIPO_AUTOMATICO = 3
 const INTEGRANTES_MIN = 3
 const INTEGRANTES_MAX = 4
+// Tope absoluto de integrantes por equipo, para cualquier materia.
+const INTEGRANTES_TOPE = 10
 
 function mezclarAleatorio(lista) {
   const copia = [...lista]
@@ -28,14 +32,14 @@ function mezclarAleatorio(lista) {
 }
 
 // idsAlumnos: ids de alumnos disponibles para este tipo (ya excluidos quienes tienen
-// equipo activo de ese tipo en la materia). Devuelve grupos de 3 y los sobrantes que no
-// alcanzaron a completar un equipo.
-function asignarEquiposAleatorio(idsAlumnos) {
+// equipo activo de ese tipo en la materia). Devuelve grupos de `tamano` integrantes y los
+// sobrantes que no alcanzaron a completar un equipo.
+function asignarEquiposAleatorio(idsAlumnos, tamano = TAMANO_EQUIPO_AUTOMATICO) {
   const mezclados = mezclarAleatorio(idsAlumnos)
   const grupos = []
   let i = 0
-  for (; i + TAMANO_EQUIPO_AUTOMATICO <= mezclados.length; i += TAMANO_EQUIPO_AUTOMATICO) {
-    grupos.push(mezclados.slice(i, i + TAMANO_EQUIPO_AUTOMATICO))
+  for (; i + tamano <= mezclados.length; i += tamano) {
+    grupos.push(mezclados.slice(i, i + tamano))
   }
   const sobrantes = mezclados.slice(i)
   return { grupos, sobrantes }
@@ -63,4 +67,5 @@ module.exports = {
   TAMANO_EQUIPO_AUTOMATICO,
   INTEGRANTES_MIN,
   INTEGRANTES_MAX,
+  INTEGRANTES_TOPE,
 }

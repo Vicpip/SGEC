@@ -1,9 +1,10 @@
 // Pantalla 05 — Crear Equipo
 // Rol: Profesor
 // URL: /equipos/nuevo
-// Descripción: Formulario para crear un equipo de 3 o 4 integrantes, de forma manual o aleatoria
-// sin repetición. Un equipo de Práctica o de Tarea se crea para ambos tipos a la vez (comparten
-// integrantes); la asignación aleatoria siempre propone 3.
+// Descripción: Formulario para crear un equipo, de forma manual o aleatoria sin repetición. El
+// número de integrantes lo define la materia (3 o 4 por defecto) y la asignación aleatoria
+// propone su tamaño automático (3 por defecto). Un equipo de Práctica o de Tarea se crea para
+// ambos tipos a la vez (comparten integrantes).
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -14,15 +15,13 @@ import SelectorSemestre from '../../components/ui/SelectorSemestre'
 import { useSelectorMateria } from '../../hooks/useSelectorMateria'
 import * as alumnosService from '../../services/alumnos.service'
 import * as equiposService from '../../services/equipos.service'
+import { rangoIntegrantes, textoRango } from '../../utils/rangoIntegrantes'
 
 const TIPOS = ['Practica', 'Tarea', 'Proyecto']
 const TIPO_LABEL = { Practica: 'Práctica', Tarea: 'Tarea', Proyecto: 'Proyecto' }
 // Practica y Tarea comparten integrantes (ver CLAUDE.md): un alumno con equipo de
 // cualquiera de esos dos tipos queda excluido del pool de elegibles del otro.
 const TIPOS_ESPEJO = ['Practica', 'Tarea']
-// Alta manual: 3 o 4 integrantes (el cuarto permite absorber a un alumno sobrante).
-const INTEGRANTES_MIN = 3
-const INTEGRANTES_MAX = 4
 
 function tiposExcluidos(tipo) {
   return TIPOS_ESPEJO.includes(tipo) ? TIPOS_ESPEJO : [tipo]
@@ -83,6 +82,8 @@ export default function CrearEquipo() {
   }, [claveMateria, materiasListas])
 
   const materiaActual = materias.find((m) => m.clave === claveMateria)
+  // Rango de integrantes y tamaño automático de la materia elegida (3, 3 y 4 por defecto).
+  const rango = rangoIntegrantes(materiaActual)
 
   const elegibles = useMemo(() => {
     const tiposAExcluir = tiposExcluidos(tipo)
@@ -100,7 +101,7 @@ export default function CrearEquipo() {
   function toggleSeleccion(idAlumno) {
     setSeleccion((prev) => {
       if (prev.includes(idAlumno)) return prev.filter((id) => id !== idAlumno)
-      if (prev.length >= INTEGRANTES_MAX) return prev
+      if (prev.length >= rango.max) return prev
       return [...prev, idAlumno]
     })
   }
@@ -111,7 +112,7 @@ export default function CrearEquipo() {
       const j = Math.floor(Math.random() * (i + 1))
       ;[copia[i], copia[j]] = [copia[j], copia[i]]
     }
-    setSeleccion(copia.slice(0, 3).map((al) => al.id_alumno))
+    setSeleccion(copia.slice(0, rango.tamano).map((al) => al.id_alumno))
   }
 
   async function handleSubmit(e) {
@@ -122,8 +123,8 @@ export default function CrearEquipo() {
       setError('El nombre del equipo es requerido')
       return
     }
-    if (seleccion.length < INTEGRANTES_MIN || seleccion.length > INTEGRANTES_MAX) {
-      setError('Selecciona 3 o 4 integrantes')
+    if (seleccion.length < rango.min || seleccion.length > rango.max) {
+      setError(`Selecciona ${textoRango(rango)} integrantes`)
       return
     }
     if (!materiaActual) {
@@ -243,8 +244,7 @@ export default function CrearEquipo() {
             <div className="form-group">
               <label className="form-label">Número de integrantes</label>
               <div className="form-control">
-                {seleccion.length} seleccionado{seleccion.length === 1 ? '' : 's'} (mínimo {INTEGRANTES_MIN}, máximo{' '}
-                {INTEGRANTES_MAX})
+                {seleccion.length} seleccionado{seleccion.length === 1 ? '' : 's'} (mínimo {rango.min}, máximo {rango.max})
               </div>
             </div>
           </div>
@@ -253,7 +253,7 @@ export default function CrearEquipo() {
         <div className="card">
           <div className="card-header">
             <span className="card-title">Integrantes asignados</span>
-            <button className="btn btn-secondary btn-sm" onClick={handleAleatorio} disabled={elegibles.length < 3}>
+            <button className="btn btn-secondary btn-sm" onClick={handleAleatorio} disabled={elegibles.length < rango.tamano}>
               <Shuffle className="icon-sm" />
               Asignar aleatoriamente
             </button>
@@ -289,7 +289,7 @@ export default function CrearEquipo() {
                     borderLeft: '3px solid var(--blue)',
                   }}
                 >
-                  Selecciona 3 o 4 integrantes de la lista, o usa la asignación aleatoria (elige 3).
+                  Selecciona {textoRango(rango)} integrantes de la lista, o usa la asignación aleatoria (elige {rango.tamano}).
                 </div>
                 {elegibles.map((al) => {
                   const marcado = seleccion.includes(al.id_alumno)
@@ -334,7 +334,7 @@ export default function CrearEquipo() {
               <button
                 className="btn btn-primary"
                 onClick={handleSubmit}
-                disabled={guardando || seleccion.length < INTEGRANTES_MIN || seleccion.length > INTEGRANTES_MAX}
+                disabled={guardando || seleccion.length < rango.min || seleccion.length > rango.max}
               >
                 {guardando ? <Loader2 className="icon-sm spin" /> : <Check className="icon-sm" />}
                 Crear equipo

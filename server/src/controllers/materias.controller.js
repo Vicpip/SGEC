@@ -5,11 +5,72 @@
 // directamente). Un Administrador opera sobre cualquier materia.
 
 const pool = require('../config/db')
+const { TAMANO_EQUIPO_AUTOMATICO, INTEGRANTES_MIN, INTEGRANTES_MAX, INTEGRANTES_TOPE } = require('../services/asignacion.service')
+
+// Configuración de equipos de la materia (migración 008) y sus valores por defecto, que
+// reproducen el comportamiento original. En E1 solo el tamaño cambia el comportamiento;
+// regla_repeticion y usa_* se guardan y se exponen, todavía sin efecto.
+const AJUSTES_POR_DEFECTO = {
+  equipo_tamano_auto: TAMANO_EQUIPO_AUTOMATICO,
+  equipo_min: INTEGRANTES_MIN,
+  equipo_max: INTEGRANTES_MAX,
+  regla_repeticion: 'B',
+  usa_practica: true,
+  usa_tarea: true,
+  usa_proyecto: true,
+}
+const CAMPOS_AJUSTES = Object.keys(AJUSTES_POR_DEFECTO)
+
+const MENSAJE_AJUSTES_CON_EQUIPOS = 'Desactiva los equipos de esta materia antes de cambiar su configuración'
+
+// Toma de `body` los campos de configuración que vengan y completa el resto con `base`.
+function combinarAjustes(base, body) {
+  const ajustes = {}
+  for (const campo of CAMPOS_AJUSTES) {
+    ajustes[campo] = body[campo] !== undefined ? body[campo] : base[campo]
+  }
+  ajustes.usa_practica = Boolean(ajustes.usa_practica)
+  ajustes.usa_tarea = Boolean(ajustes.usa_tarea)
+  ajustes.usa_proyecto = Boolean(ajustes.usa_proyecto)
+  return ajustes
+}
+
+// Devuelve el mensaje de error si la configuración combinada no es coherente; null si sí.
+function validarAjustesEquipos(ajustes) {
+  const { equipo_min: min, equipo_tamano_auto: tamano, equipo_max: max } = ajustes
+  if (!(min >= 1 && min <= tamano && tamano <= max && max <= INTEGRANTES_TOPE)) {
+    return `La configuración de equipos no es válida: debe cumplirse 1 ≤ mínimo ≤ tamaño automático ≤ máximo ≤ ${INTEGRANTES_TOPE}`
+  }
+  if (!ajustes.usa_practica && !ajustes.usa_tarea && !ajustes.usa_proyecto) {
+    return 'La materia debe usar al menos un tipo de equipo'
+  }
+  return null
+}
+
+// Con equipos activos solo se permite ampliar el máximo de integrantes: cambiar el tamaño
+// automático, el mínimo o la regla, o bajar el máximo, dejaría equipos ya formados bajo
+// reglas distintas de las que se validaron al crearlos. Los tipos (usa_*) se guardan sin
+// restricción mientras no tengan efecto.
+function cambiaAjusteRestringido(actual, nuevos) {
+  return (
+    Number(nuevos.equipo_tamano_auto) !== Number(actual.equipo_tamano_auto) ||
+    Number(nuevos.equipo_min) !== Number(actual.equipo_min) ||
+    Number(nuevos.equipo_max) < Number(actual.equipo_max) ||
+    nuevos.regla_repeticion !== actual.regla_repeticion
+  )
+}
+
+async function tieneEquiposActivos(idMateria) {
+  const [rows] = await pool.query('SELECT 1 FROM equipo WHERE id_materia = ? AND activo = TRUE LIMIT 1', [idMateria])
+  return rows.length > 0
+}
 
 const SELECT_BASE = `
   SELECT
     m.id_materia, m.clave, m.nombre, m.grupo, m.id_semestre, m.id_profesor,
     m.estatus, m.fecha_creacion,
+    m.equipo_tamano_auto, m.equipo_min, m.equipo_max, m.regla_repeticion,
+    m.usa_practica, m.usa_tarea, m.usa_proyecto,
     s.clave AS semestre,
     u.nombre AS profesor_nombre, u.apellido_paterno AS profesor_apellido_paterno,
     COUNT(DISTINCT ma.id_alumno) AS total_alumnos,
@@ -109,6 +170,12 @@ async function crear(req, res) {
     idProfesorFinal = await obtenerIdProfesorPropio(req.user.id_usuario)
   }
 
+  const ajustes = combinarAjustes(AJUSTES_POR_DEFECTO, req.body)
+  const errorAjustes = validarAjustesEquipos(ajustes)
+  if (errorAjustes) {
+    return res.status(400).json({ error: errorAjustes })
+  }
+
   const [semestreRows] = await pool.query('SELECT id_semestre, clave, activo FROM semestre WHERE id_semestre = ?', [
     id_semestre,
   ])
@@ -139,8 +206,9 @@ async function crear(req, res) {
 
   try {
     const [result] = await pool.query(
-      'INSERT INTO materia (clave, nombre, grupo, id_semestre, id_profesor) VALUES (?, ?, ?, ?, ?)',
-      [clave, nombre, grupo, id_semestre, idProfesorFinal]
+      `INSERT INTO materia (clave, nombre, grupo, id_semestre, id_profesor, ${CAMPOS_AJUSTES.join(', ')})
+       VALUES (?, ?, ?, ?, ?, ${CAMPOS_AJUSTES.map(() => '?').join(', ')})`,
+      [clave, nombre, grupo, id_semestre, idProfesorFinal, ...CAMPOS_AJUSTES.map((c) => ajustes[c])]
     )
 
     res.status(201).json({
@@ -152,6 +220,7 @@ async function crear(req, res) {
         id_semestre,
         id_profesor: idProfesorFinal,
         estatus: 'Activa',
+        ...ajustes,
       },
     })
   } catch (err) {
@@ -167,7 +236,7 @@ async function actualizar(req, res) {
   const { clave, nombre, grupo, id_semestre, estatus, id_profesor } = req.body
 
   const [materiaRows] = await pool.query(
-    'SELECT id_materia, id_profesor, id_semestre FROM materia WHERE id_materia = ?',
+    `SELECT id_materia, id_profesor, id_semestre, ${CAMPOS_AJUSTES.join(', ')} FROM materia WHERE id_materia = ?`,
     [id]
   )
   const materia = materiaRows[0]
@@ -190,6 +259,16 @@ async function actualizar(req, res) {
       return res.status(400).json({ error: 'El profesor indicado no existe' })
     }
     idProfesorFinal = id_profesor
+  }
+
+  // Los campos de configuración que no vengan conservan su valor actual.
+  const ajustes = combinarAjustes(materia, req.body)
+  const errorAjustes = validarAjustesEquipos(ajustes)
+  if (errorAjustes) {
+    return res.status(400).json({ error: errorAjustes })
+  }
+  if (cambiaAjusteRestringido(materia, ajustes) && (await tieneEquiposActivos(materia.id_materia))) {
+    return res.status(409).json({ error: MENSAJE_AJUSTES_CON_EQUIPOS })
   }
 
   const [semestreRows] = await pool.query('SELECT id_semestre, clave, activo FROM semestre WHERE id_semestre = ?', [
@@ -222,8 +301,10 @@ async function actualizar(req, res) {
 
   try {
     await pool.query(
-      'UPDATE materia SET clave = ?, nombre = ?, grupo = ?, id_semestre = ?, estatus = ?, id_profesor = ? WHERE id_materia = ?',
-      [clave, nombre, grupo, id_semestre, estatus, idProfesorFinal, id]
+      `UPDATE materia SET clave = ?, nombre = ?, grupo = ?, id_semestre = ?, estatus = ?, id_profesor = ?,
+              ${CAMPOS_AJUSTES.map((c) => `${c} = ?`).join(', ')}
+       WHERE id_materia = ?`,
+      [clave, nombre, grupo, id_semestre, estatus, idProfesorFinal, ...CAMPOS_AJUSTES.map((c) => ajustes[c]), id]
     )
 
     res.status(200).json({ message: 'Materia actualizada' })

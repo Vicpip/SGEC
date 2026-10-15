@@ -1,19 +1,19 @@
 const Joi = require('joi')
 
-const { INTEGRANTES_MIN, INTEGRANTES_MAX } = require('../services/asignacion.service')
+const { INTEGRANTES_TOPE } = require('../services/asignacion.service')
 
-// Alta y edición manual: 3 o 4 integrantes (nunca menos de 3, nunca más de 4), para que el
-// profesor pueda absorber a los alumnos que sobran de la asignación automática (que siempre
-// forma equipos de exactamente 3).
+// Alta y edición manual: aquí solo se acota a un rango absoluto (1 a 10). El rango real lo
+// define cada materia (materia.equipo_min y equipo_max, 3 y 4 por defecto) y lo comprueba
+// equipos.controller.js, porque depende de la base de datos.
 const integrantesSchema = Joi.array()
   .items(Joi.number().integer().positive())
-  .min(INTEGRANTES_MIN)
-  .max(INTEGRANTES_MAX)
+  .min(1)
+  .max(INTEGRANTES_TOPE)
   .unique()
   .required()
   .messages({
-    'array.min': 'Un equipo debe tener al menos 3 integrantes',
-    'array.max': 'Un equipo puede tener como máximo 4 integrantes',
+    'array.min': 'Un equipo debe tener al menos 1 integrante',
+    'array.max': `Un equipo puede tener como máximo ${INTEGRANTES_TOPE} integrantes`,
     'array.unique': 'Un alumno no puede repetirse en el mismo equipo',
   })
 

@@ -68,7 +68,9 @@ async function resolverMateriaPorClave(usuario, { clave, idMateria, semestre } =
   }
 
   const [rows] = await pool.query(
-    `SELECT m.id_materia, m.clave, m.nombre, m.grupo, m.id_profesor, m.estatus, s.clave AS semestre
+    `SELECT m.id_materia, m.clave, m.nombre, m.grupo, m.id_profesor, m.estatus, s.clave AS semestre,
+            m.equipo_tamano_auto, m.equipo_min, m.equipo_max, m.regla_repeticion,
+            m.usa_practica, m.usa_tarea, m.usa_proyecto
      FROM materia m
      JOIN semestre s ON s.id_semestre = m.id_semestre
      WHERE ${condiciones.join(' AND ')}
