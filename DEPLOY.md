@@ -44,7 +44,13 @@ Rellena al menos:
 | `DB_PASSWORD` | Una contraseña larga y aleatoria: `openssl rand -base64 24` |
 | `JWT_SECRET` | `openssl rand -base64 48` (con menos de 32 caracteres el servidor no arranca) |
 | `CLIENT_URL` | `https://<tu-dominio>` |
-| `VITE_API_URL` | `https://<tu-dominio>/api` |
+| `VITE_API_URL` | `/api` (ruta relativa; también vale `https://<tu-dominio>/api`, **nunca** `localhost`) |
+
+`VITE_API_URL` se hornea en el frontend al construir la imagen del cliente. Si vale
+`http://localhost:3001/api` (el valor de las pruebas locales), el sitio carga pero el inicio de
+sesión falla en todos los navegadores, porque cada navegador busca la API en su propia máquina.
+Si la variable falta, el archivo base usa `/api`. Cambiarla exige reconstruir el cliente:
+`docker compose up -d --build client`.
 
 `chmod 600 .env` para que solo tu usuario pueda leerlo. Ese archivo no se sube nunca al
 repositorio.
@@ -61,7 +67,7 @@ docker compose ps
 Deben quedar `sgec_db`, `sgec_server` y `sgec_client` con estado `Up`. Los puertos del archivo
 base ya son los de producción:
 
-- `client` en el puerto **4000** del host (el Nginx del host le hace proxy);
+- `client` en **127.0.0.1:4000** — el Nginx del host le hace proxy; desde internet no se llega;
 - `server` en **127.0.0.1:3001** — alcanzable desde el Nginx del host, no desde internet;
 - `db` sin puertos publicados.
 
@@ -142,13 +148,12 @@ ufw status
 ```
 
 Ojo: Docker publica sus puertos con reglas propias de `iptables` que **no pasan por `ufw`**. Por
-eso el backend se publica solo en `127.0.0.1:3001` (inalcanzable desde fuera con o sin
-cortafuegos). El puerto 4000 sí queda abierto en todas las interfaces: sirve únicamente el
-frontend estático, sin datos. Para cerrarlo también, hazlo en el cortafuegos del proveedor del
-servidor, o cambia en `docker-compose.yml` `"4000:80"` por `"127.0.0.1:4000:80"`.
+eso el archivo base publica el backend solo en `127.0.0.1:3001` y el frontend solo en
+`127.0.0.1:4000`: son inalcanzables desde fuera con o sin cortafuegos, y el único camino es el
+Nginx del host con HTTPS. Las reglas `ufw deny` son una segunda barrera.
 
-Compruébalo desde **otra** máquina: `curl -m 5 http://<tu-dominio>:3001/api/health` no debe
-responder.
+Compruébalo desde **otra** máquina: `curl -m 5 http://<tu-dominio>:3001/api/health` y
+`curl -m 5 http://<tu-dominio>:4000/` no deben responder.
 
 Abre `https://<tu-dominio>`: debe mostrar el inicio de sesión con el candado de HTTPS. Entra
 con el Administrador creado en el paso 4.
@@ -173,7 +178,10 @@ docker compose exec server node db/migrations/aplicar_004.js
 docker compose exec server node db/migrations/aplicar_005.js
 ```
 
-Qué agrega cada una y qué falla si falta: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+Después de migrar, comprueba que el esquema quedó igual al del repositorio con
+`server/db/comparar_esquema.js` (los comandos están en el paso 3 del checklist
+`docs/cierre/S16-checklist-manual.md`). Qué agrega cada migración y qué falla si falta:
+[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ---
 
@@ -183,10 +191,15 @@ Los puertos de desarrollo (80 y 3001 abiertos, sin Nginx delante) están en un a
 que se usa de forma explícita:
 
 ```bash
-cp .env.production.example .env      # CLIENT_URL=http://localhost  VITE_API_URL=http://localhost:3001/api
+cp .env.production.example .env      # CLIENT_URL=http://localhost  (y borra la línea VITE_API_URL)
 docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --build
 docker compose -f docker-compose.yml -f docker-compose.local.yml exec -e SEED_DEMO=true server node db/seeds/run_seeds.js
 ```
+
+En esta prueba no hay un Nginx que reparta `/api` (el del contenedor del cliente solo sirve
+archivos estáticos), así que `docker-compose.local.yml` construye el frontend con
+`VITE_API_URL=http://localhost:3001/api` salvo que tu `.env` diga otra cosa. **No reutilices esa
+imagen ni ese `.env` en el servidor.**
 
 Ese archivo no se llama `docker-compose.override.yml` a propósito: Compose aplica ese nombre de
 forma automática, y entonces los puertos de desarrollo también se abrirían en el servidor.

@@ -1,10 +1,17 @@
 # SGEC — archivo base: PRODUCCIÓN, detrás del Nginx del host (ver DEPLOY.md).
 #
 # Puertos:
-#   - client → 4000 del host. El Nginx del host hace proxy de "/" hacia aquí.
+#   - client → 4000, publicado SOLO en 127.0.0.1: el Nginx del host hace proxy de "/" hacia
+#     aquí. Docker se salta el cortafuegos (ufw), así que publicarlo en todas las interfaces
+#     dejaría el sitio abierto por HTTP, sin TLS, en el puerto 4000 de la IP pública.
 #   - server → 3001, publicado SOLO en 127.0.0.1: el Nginx del host hace proxy de "/api"
 #     hacia ahí, pero desde fuera de la máquina no se puede llegar directo a Node.
 #   - db     → sin puertos publicados.
+#
+# URL de la API dentro del frontend: VITE_API_URL se hornea en el bundle al construir la
+# imagen del cliente. En producción es la ruta relativa /api (valor por defecto): el Nginx del
+# host reparte /api al servidor y / al cliente en el mismo dominio. Nunca debe ser localhost.
+# Cambiarla exige reconstruir el cliente: docker compose up -d --build client
 #
 # Desarrollo local con Docker (puertos 80 y 3001 abiertos): este archivo MÁS el local, de
 # forma explícita. No existe un docker-compose.override.yml a propósito, porque Compose lo
@@ -90,11 +97,11 @@ services:
       context: ./client
       dockerfile: Dockerfile
       args:
-        VITE_API_URL: ${VITE_API_URL}
+        VITE_API_URL: ${VITE_API_URL:-/api}
     container_name: sgec_client
     restart: always
     ports:
-      - "4000:80"
+      - "127.0.0.1:4000:80"
     networks:
       - sgec_net
 

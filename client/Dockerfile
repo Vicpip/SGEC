@@ -5,7 +5,9 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-ARG VITE_API_URL
+# URL de la API horneada en el bundle. Por defecto la ruta relativa /api (producción detrás
+# del Nginx del host, mismo dominio). docker-compose.local.yml la cambia para pruebas locales.
+ARG VITE_API_URL=/api
 ENV VITE_API_URL=$VITE_API_URL
 
 COPY package*.json ./

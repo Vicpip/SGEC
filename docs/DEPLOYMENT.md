@@ -73,7 +73,7 @@ node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
 
 | Variable | Notas |
 |---|---|
-| `VITE_API_URL` | URL base de la API. En dev, `http://localhost:3001/api`; en el build de producción, la URL pública real (`https://<tu-dominio>/api`) — se hornea en el bundle en tiempo de build, no se puede cambiar después sin rebuild |
+| `VITE_API_URL` | URL base de la API. En dev, `http://localhost:3001/api` (o `/api`, que pasa por el proxy de Vite). En el build de producción, la ruta relativa `/api` (valor por defecto del `docker-compose.yml` base, del `client/Dockerfile` y de `api.js` si falta); también vale `https://<tu-dominio>/api`, nunca `localhost`. Se hornea en el bundle al construir: cambiarla exige `docker compose up -d --build client` |
 
 ## Producción (Docker Compose + Nginx del host)
 
@@ -88,7 +88,7 @@ y hace reverse proxy hacia los contenedores. La guía paso a paso está en
 
 | Servicio | Puerto en el host | Notas |
 |---|---|---|
-| `client` | `4000` | El Nginx del host hace proxy de `/` hacia aquí |
+| `client` | `127.0.0.1:4000` | Solo alcanzable desde el propio servidor (Nginx del host → `/`). Docker se salta `ufw`: publicarlo en todas las interfaces dejaría el sitio por HTTP sin TLS |
 | `server` | `127.0.0.1:3001` | Solo alcanzable desde el propio servidor (Nginx del host → `/api`). Nunca publicado hacia internet |
 | `db` | — | Sin puertos publicados. Arranca con `--default-time-zone=-06:00` |
 
@@ -103,7 +103,7 @@ nano .env
 #   - DB_PASSWORD  → openssl rand -base64 24
 #   - JWT_SECRET   → openssl rand -base64 48
 #   - CLIENT_URL   → https://<tu-dominio>
-#   - VITE_API_URL → https://<tu-dominio>/api
+#   - VITE_API_URL → /api   (nunca localhost; ver la tabla de variables del cliente)
 
 # 3. Levantar los contenedores
 docker compose up -d --build
@@ -181,6 +181,14 @@ docker compose exec server node db/migrations/aplicar_003.js
 docker compose exec server node db/migrations/aplicar_004.js
 docker compose exec server node db/migrations/aplicar_005.js
 ```
+
+Después de migrar, compara la base contra una creada con el `schema.sql` del repositorio:
+`node server/db/comparar_esquema.js <base_migrada> <base_nueva>` (solo lectura; tablas,
+columnas, índices y llaves foráneas; código de salida 0 = iguales, 1 = diferencias, 2 = no pudo
+comparar). Los comandos exactos con Docker, incluida la creación de la base `sgec_check`, están en
+el paso 3 de `docs/cierre/S16-checklist-manual.md`. Probado en la Sesión 17 con una copia del
+volcado de septiembre: antes de migrar reporta exactamente las 7 diferencias que aportan las
+migraciones 002–005; después, ninguna.
 
 Si se despliega el código de la Sesión 13 sin esta migración, el alta/importación de alumnos, el
 cambio de contraseña y el restablecimiento por enlace fallan con error 500 (columna inexistente).

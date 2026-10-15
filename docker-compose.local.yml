@@ -9,7 +9,9 @@
 # `!override` reemplaza la lista de puertos del archivo base en lugar de sumarse a ella
 # (requiere Docker Compose 2.24 o posterior).
 #
-# En tu .env local: CLIENT_URL=http://localhost y VITE_API_URL=http://localhost:3001/api
+# En tu .env local: CLIENT_URL=http://localhost. Aquí no hay un Nginx que reparta /api (el del
+# contenedor del cliente solo sirve estáticos), así que el frontend local llama directo al
+# servidor: VITE_API_URL vale http://localhost:3001/api salvo que tu .env diga otra cosa.
 
 services:
   server:
@@ -20,5 +22,8 @@ services:
       - "3001:3001"
 
   client:
+    build:
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:3001/api}
     ports: !override
       - "80:80"

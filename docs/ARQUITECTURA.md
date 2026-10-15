@@ -83,9 +83,29 @@ Piezas transversales agregadas en la Sesión 16:
   sistema son "hora de pared" de México.
 - **middlewares/auth.middleware.js** — además de verificar el JWT, consulta la cuenta en cada
   petición: rechaza cuentas inactivas y tokens anteriores al último cambio de contraseña.
-- **utils/limitePeticiones.js** — respuesta común de los limitadores; deja en el log la IP que
-  se está contando.
+- **utils/limitePeticiones.js** — los limitadores de peticiones (ajustados en la revisión de
+  S16). Login: solo intentos fallidos, 5 por IP + correo y 50 por IP en 15 min. Recuperación de
+  contraseña: 3 por IP + correo y 30 por IP. General de `/api`: 600 por 15 min por usuario
+  autenticado (o por IP sin token válido), para que un grupo que sale por la misma IP no se
+  bloquee entre sí. Deja en el log la IP que se está contando.
+- **db/comparar_esquema.js** — compara (solo lectura) el esquema de dos bases: se usa después
+  de migrar para confirmar que la base real quedó igual a una creada con `schema.sql`.
 - **db/create_admin.js** — crea el Administrador inicial de una instalación de producción.
+
+## Despliegue en producción
+
+```
+navegador ──HTTPS──> Nginx del host (TLS, X-Forwarded-For)
+                       ├── /api/ ──> 127.0.0.1:3001  contenedor server (Node/Express)
+                       │                                └── red interna ──> contenedor db (MySQL, sin puertos)
+                       └── /     ──> 127.0.0.1:4000  contenedor client (Nginx interno: solo estáticos)
+```
+
+Los dos puertos se publican solo en `127.0.0.1` (Docker se salta `ufw`), así que el único camino
+desde internet es el Nginx del host con HTTPS. El Nginx del contenedor `client` no reenvía
+`/api`: el frontend llama a la ruta relativa `/api` (`VITE_API_URL`, horneada al construir) y es
+el Nginx del host quien la reparte. Detalle en [DEPLOYMENT.md](./DEPLOYMENT.md) y
+[DEPLOY.md](../DEPLOY.md).
 
 ## Modelo de datos (16 tablas)
 

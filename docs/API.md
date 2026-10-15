@@ -9,7 +9,7 @@ Errores comunes a casi todos los endpoints, no repetidos en cada sección:
 | Código | Cuándo |
 |---|---|
 | 401 | Falta el header `Authorization`; el token es inválido o expiró; la cuenta ya no existe o está inactiva (`codigo: CUENTA_INACTIVA`); o el token se emitió antes del último cambio de contraseña (`codigo: SESION_INVALIDADA`). El cliente cierra la sesión ante cualquier 401 salvo `CONTRASENA_ACTUAL_INCORRECTA` |
-| 429 | Se superó el límite de peticiones para esa IP (300 por 15 min en toda la API; límites propios en `/auth`) |
+| 429 | Se superó un límite de peticiones (600 por 15 min en toda la API, por usuario autenticado o por IP sin token válido; límites propios en `/auth`) |
 | 403 | Token válido pero rol no permitido, o el recurso no pertenece al usuario autenticado |
 | 400 | Body/params no pasan la validación Joi (`{ message, errores: [...] }`) o falta un parámetro requerido |
 | 404 | El recurso no existe o (para Alumno) no debe revelarse que existe |
@@ -18,7 +18,10 @@ Errores comunes a casi todos los endpoints, no repetidos en cada sección:
 ## auth
 
 Rutas públicas salvo `/me`, `/logout`, `/change-password`. Límites de tasa propios además del
-general de `/api`: `/login` 5 intentos/15 min, `/forgot-password` 3 intentos/15 min.
+general de `/api` (ventanas de 15 min): `/login` cuenta solo los intentos **fallidos** (respuesta
+4xx): 5 por IP + correo y 50 por IP; `/forgot-password` cuenta todas las solicitudes (su
+respuesta es siempre la misma): 3 por IP + correo y 30 por IP. Un correo bloqueado no bloquea a
+otro correo ni los inicios de sesión correctos desde la misma IP.
 
 | Método | Ruta | Rol | Body / params | Respuestas |
 |---|---|---|---|---|
@@ -43,10 +46,12 @@ inactiva (`CUENTA_INACTIVA`) o si el token es anterior a `usuario.contrasena_cam
 abiertas con la anterior (`change-password` devuelve un token nuevo para la sesión que hizo el
 cambio). La comparación es por segundo, la precisión del `iat` del token.
 
-**Límites e IP del cliente.** Los límites cuentan por `req.ip`. Detrás del Nginx del host,
-`TRUST_PROXY=1` (valor por defecto) hace que `req.ip` sea la última dirección de
+**Límites e IP del cliente.** Los límites usan `req.ip` (más el correo normalizado en
+`/login` y `/forgot-password`, o el usuario del token en el límite general). Detrás del Nginx del
+host, `TRUST_PROXY=1` (valor por defecto) hace que `req.ip` sea la última dirección de
 `X-Forwarded-For`, la que agrega ese Nginx. La primera petición rechazada de cada ventana deja
-en el log `[rate-limit] <login|forgot-password|api>: límite alcanzado para la IP <ip>`.
+en el log `[rate-limit] <login|login-ip|forgot-password|forgot-password-ip|api>: límite
+alcanzado para la IP <ip>` (con el dominio del correo, nunca el correo completo).
 
 `nueva_contrasena` exige mínimo 8 caracteres, al menos una mayúscula y un número (Joi, mismo
 criterio que el copy de Perfil.jsx). El login valida el dominio del correo contra el rol elegido

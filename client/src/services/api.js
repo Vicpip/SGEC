@@ -1,7 +1,9 @@
 import axios from 'axios'
 
+// VITE_API_URL se fija al construir. Sin valor, la ruta relativa /api: funciona en producción
+// (el Nginx del host reparte /api en el mismo dominio) y en desarrollo (proxy de Vite).
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL,
+  baseURL: import.meta.env.VITE_API_URL || '/api',
 })
 
 api.interceptors.request.use((config) => {

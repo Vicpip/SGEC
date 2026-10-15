@@ -393,6 +393,27 @@ Resumen de lo que cambió en materia de seguridad. El detalle de las pruebas est
 - **El backend ya no se publica hacia internet.** `docker-compose.yml` publica el puerto 3001
   solo en `127.0.0.1`. Docker abre sus puertos sin pasar por `ufw`, así que publicarlo en todas
   las interfaces lo dejaba alcanzable aunque el cortafuegos dijera lo contrario.
+
+Ajustes de la revisión de S16 (commit "fix: sesión 16 - correcciones de revisión"):
+
+- **El frontend tampoco.** El contenedor `client` se publicaba como `4000:80` en todas las
+  interfaces: el sitio quedaba accesible por HTTP, sin TLS, en el puerto 4000 de la IP pública.
+  Ahora es `127.0.0.1:4000:80`. El servicio `db` no publica ningún puerto.
+- **Limitadores pensados para una IP compartida.** Con `trust proxy` el límite pasó a ser por IP
+  pública, pero en ESCOM muchos alumnos salen por la misma IP: cinco fallos de una persona
+  bloqueaban el inicio de sesión de todo el grupo. Ahora el login cuenta solo intentos
+  fallidos, con clave IP + correo normalizado (5 por 15 min) y un tope por IP de 50 fallos;
+  "olvidé mi contraseña" cuenta toda solicitud (su respuesta no distingue éxito de fallo) con 3
+  por IP + correo y 30 por IP; y el límite general de `/api` pasó de 300 por IP a 600 por
+  usuario autenticado (por IP solo sin token válido; la clave se toma del JWT con firma
+  verificada, así que un token inventado cae en el contador de su IP). El log registra la IP y
+  solo el dominio del correo. Verificado con 26 peticiones de prueba con `X-Forwarded-For`
+  (ver `docs/cierre/S17.md`).
+- **URL de la API horneada en el bundle.** `docker-compose.yml`, `client/Dockerfile` y
+  `services/api.js` usan por defecto la ruta relativa `/api`. Un bundle con `localhost` hacía
+  que cada navegador buscara la API en su propia máquina. CORS sigue siendo de origen único
+  (`CLIENT_URL`): el servidor responde siempre con ese origen, así que el navegador rechaza
+  cualquier otro.
 - **Zona horaria única (UTC-06:00).** Node (`TZ=America/Mexico_City`) y cada sesión de MySQL
   (`SET time_zone = '-06:00'`) leen las fechas igual. Con los contenedores en UTC, una actividad
   programada se publicaba 6 horas antes de lo indicado y las entregas se marcaban como tardías

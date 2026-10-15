@@ -1,7 +1,9 @@
-# Sesión 16 — Checklist manual para el servidor de producción
+# Sesiones 13 a 17 — Checklist manual para el servidor de producción
 
-Lo ejecuta una persona con acceso al servidor. Nada de esto lo hizo Claude: la Sesión 16 no tocó
-el servidor ni envió una sola petición al dominio.
+Lo ejecuta una persona con acceso al servidor. Nada de esto lo hizo Claude: las sesiones 16 y 17
+no tocaron el servidor ni enviaron una sola petición al dominio. Revisado en la Sesión 17
+(correcciones de la revisión de S16: puertos, respaldo, deriva de esquema, limitadores, cuentas
+de demostración y URL de la API dentro del frontend).
 
 Antes de empezar:
 
@@ -10,31 +12,97 @@ Antes de empezar:
 - Hazlo en un momento sin clases en curso: entre el paso 2 y el paso 3 la aplicación responde
   con error a quien ya tenga la sesión abierta.
 - Marca cada casilla al terminar. Si un paso falla, detente y revisa `docker compose logs server`.
+- Ten a la mano un teléfono con datos móviles: sirve para comprobar el paso 6 desde fuera y por
+  si el paso 8 te bloquea.
 
-Todos los comandos se ejecutan dentro del servidor, en `/var/www/sgec`.
+Todos los comandos se ejecutan dentro del servidor, en `/var/www/sgec`. Los que hablan con MySQL
+usan `$MYSQL_ROOT_PASSWORD`, una variable que **ya existe dentro del contenedor `db`** (el
+compose la llena con `DB_PASSWORD`). Van entre comillas simples a propósito: así la variable se
+lee dentro del contenedor y la contraseña no aparece en tu terminal ni en el historial.
 
 ---
 
 ## 0. Respaldo (antes de tocar nada)
 
-- [ ] Respaldar la base de datos (pide la contraseña de MySQL; el archivo queda fuera del repo):
+- [ ] Anotar el commit desplegado hoy, por si hay que volver atrás:
 
   ```bash
   cd /var/www/sgec
-  docker compose exec db sh -c 'mysqldump -u root -p --single-transaction sgec' > ~/sgec-respaldo-$(date +%F).sql
-  ls -lh ~/sgec-respaldo-*.sql      # debe pesar más de unos KB
+  git rev-parse --short HEAD          # anótalo: ______________
   ```
 
-- [ ] Anotar el commit que está desplegado hoy, por si hay que volver atrás: `git rev-parse --short HEAD`
+- [ ] Respaldar la base de datos. `-T` es obligatorio: sin él, `exec` abre una terminal virtual
+  y el archivo queda corrupto (saltos de línea alterados y mensajes mezclados con el volcado):
 
-## 1. Revisar la configuración actual del Nginx del host
+  ```bash
+  RESPALDO=~/sgec-respaldo-$(date +%F-%H%M).sql
+  docker compose exec -T db sh -c 'mysqldump -u root -p"$MYSQL_ROOT_PASSWORD" --single-transaction --routines sgec' > "$RESPALDO"
+  ls -lh "$RESPALDO"                  # debe pesar más de unos KB
+  tail -n 1 "$RESPALDO"               # debe decir: -- Dump completed on <fecha>
+  ```
 
-El archivo base de Compose cambia cómo se publican los puertos. Antes de actualizar:
+  Si la última línea no es `-- Dump completed`, el respaldo está incompleto: **no sigas**. (El
+  aviso "Using a password on the command line interface can be insecure" sale en pantalla, no en
+  el archivo, y es normal: la contraseña nunca se escribió en tu terminal.)
+
+- [ ] Probar que el respaldo se puede restaurar, en una base temporal. Primero confirma que el
+  archivo **no** trae `USE` ni `CREATE DATABASE` (si los trajera, restaurarlo escribiría sobre
+  `sgec`); el comando de arriba no los genera, pero compruébalo:
+
+  ```bash
+  grep -c -E '^(USE|CREATE DATABASE)' "$RESPALDO"      # debe imprimir 0. Si no es 0, NO restaures
+  docker compose exec -T db sh -c 'mysql -u root -p"$MYSQL_ROOT_PASSWORD" -e "CREATE DATABASE sgec_restore_test"'
+  docker compose exec -T db sh -c 'mysql -u root -p"$MYSQL_ROOT_PASSWORD" sgec_restore_test' < "$RESPALDO"
+  docker compose exec -T db sh -c 'mysql -u root -p"$MYSQL_ROOT_PASSWORD" -e "SELECT (SELECT COUNT(*) FROM sgec.usuario) AS usuarios_sgec, (SELECT COUNT(*) FROM sgec_restore_test.usuario) AS usuarios_restaurados"'
+  docker compose exec -T db sh -c 'mysql -u root -p"$MYSQL_ROOT_PASSWORD" -e "DROP DATABASE sgec_restore_test"'
+  ```
+
+  Los dos conteos deben ser iguales.
+
+- [ ] Respaldar los archivos subidos (adjuntos de actividades, entregas y avisos). Viven en un
+  volumen de Docker; su nombre real lleva delante el nombre del proyecto:
+
+  ```bash
+  docker volume ls | grep uploads     # p. ej. sgec_sgec_uploads; usa el nombre que salga
+  VOL=sgec_sgec_uploads
+  docker run --rm -v "$VOL":/datos:ro -v "$HOME":/respaldo alpine \
+    tar czf /respaldo/sgec-uploads-$(date +%F-%H%M).tar.gz -C /datos .
+  ls -lh ~/sgec-uploads-*.tar.gz
+  tar tzf ~/sgec-uploads-*.tar.gz | head     # lista algunos archivos (o solo ./ si no hay)
+  ```
+
+- [ ] Copiar ambos respaldos fuera del servidor (por ejemplo con `scp` desde tu computadora).
+
+## 1. Decidir la ruta: migrar (A) o recrear la base (B)
+
+La base de producción se creó en agosto y no se ha migrado desde entonces. Si solo contiene datos
+de ejemplo, es más seguro **recrearla** desde el `schema.sql` nuevo que migrarla.
+
+- [ ] Contar lo que hay:
+
+  ```bash
+  docker compose exec -T db sh -c 'mysql -u root -p"$MYSQL_ROOT_PASSWORD" sgec -e "
+    SELECT rol, COUNT(*) AS cuentas FROM usuario GROUP BY rol;
+    SELECT correo_institucional, rol FROM usuario ORDER BY rol, correo_institucional;
+    SELECT (SELECT COUNT(*) FROM materia) AS materias, (SELECT COUNT(*) FROM materia_alumno) AS inscripciones,
+           (SELECT COUNT(*) FROM equipo) AS equipos, (SELECT COUNT(*) FROM actividad) AS actividades,
+           (SELECT COUNT(*) FROM entrega) AS entregas, (SELECT COUNT(*) FROM calificacion) AS calificaciones,
+           (SELECT COUNT(*) FROM aviso) AS avisos;"'
+  ```
+
+- [ ] Decidir:
+  - **Ruta B (recrear)** solo si TODAS las cuentas son las de ejemplo (`admin@ipn.mx`,
+    `mgarcia@ipn.mx`, `s.ramirez@alumno.ipn.mx` y las demás de `server/db/seeds/`) y no hay
+    materias, actividades ni entregas que alguien vaya a extrañar. Sigue la sección
+    "Ruta B" al final y vuelve al paso 6.
+  - **Ruta A (migrar)** en cualquier otro caso, o si tienes la menor duda. Sigue en el paso 2.
+
+## 2. Revisar el Nginx del host, actualizar el código y reconstruir
 
 - [ ] Ver a dónde apunta hoy Nginx: `grep -n proxy_pass /etc/nginx/sites-enabled/*`
   - `/api` debe ir a `http://127.0.0.1:3001` y `/` a `http://127.0.0.1:4000`.
-  - Si dice `localhost` en lugar de `127.0.0.1`, cámbialo: el backend ahora solo escucha en
-    `127.0.0.1` (IPv4) y `localhost` puede resolverse también a IPv6.
+  - Si dice `localhost` en lugar de `127.0.0.1`, cámbialo: los contenedores ahora solo escuchan
+    en `127.0.0.1` (IPv4) y `localhost` puede resolverse a IPv6.
 - [ ] Comprobar que el bloque de `/api` tiene estas dos líneas (compáralo con la plantilla
   `deploy/nginx-vps.conf` del repositorio):
 
@@ -46,23 +114,33 @@ El archivo base de Compose cambia cómo se publican los puertos. Antes de actual
   Sin la primera, todos los usuarios comparten el mismo límite de inicios de sesión. Sin la
   segunda, subir un archivo de más de 1 MB responde 413.
 - [ ] Si cambiaste algo: `nginx -t && systemctl reload nginx`
+- [ ] Revisar el `.env` del servidor contra `.env.production.example` (sin imprimirlo en un
+  chat). Dos líneas importan especialmente:
+  - `VITE_API_URL=/api` — **crítico.** Se hornea en el frontend al construir. Si vale
+    `http://localhost:3001/api` o cualquier cosa con `localhost`, el sitio carga pero el inicio
+    de sesión falla en todos los navegadores. Si la línea no existe, el compose usa `/api`.
+    También vale `https://<tu-dominio>/api`.
+  - `CLIENT_URL=https://<tu-dominio>` — exacto, sin `/` final: es el único origen que acepta
+    CORS.
 
-## 2. Actualizar el código y reconstruir
-
-- [ ] Revisar que el `.env` del servidor tiene las variables de `.env.production.example` (no
-  hace falta agregar `TRUST_PROXY`: vale 1 por defecto).
+  Para revisarlas sin mostrar el resto: `grep -E '^(VITE_API_URL|CLIENT_URL)=' .env`
+  (`TRUST_PROXY` no hace falta: vale 1 por defecto).
 - [ ] Actualizar y reconstruir (el servicio del frontend se llama `client`):
 
   ```bash
   cd /var/www/sgec && git pull && docker compose up -d --build
   docker compose ps        # sgec_db, sgec_server y sgec_client en "Up"
+  docker compose ps --format '{{.Name}} {{.Ports}}'
   ```
+
+  En la última línea, el cliente debe decir `127.0.0.1:4000->80/tcp` y el servidor
+  `127.0.0.1:3001->3001/tcp`; ninguno `0.0.0.0`. La base, sin puertos publicados.
 
   Si `git pull` se queja de cambios locales en `docker-compose.yml` (en el servidor se habían
   agregado los puertos a mano), descártalos: el archivo del repositorio ya trae los puertos de
   producción. `git checkout -- docker-compose.yml && git pull`.
 
-## 3. Aplicar las migraciones 002 a 005 — de inmediato
+## 3. Ruta A: aplicar las migraciones 002 a 005 — de inmediato
 
 Hasta que se aplique la 005, **toda** ruta autenticada responde 500 (se puede iniciar sesión,
 pero nada más funciona). Sin la 002 fallan el alta de alumnos y el cambio de contraseña.
@@ -77,10 +155,34 @@ pero nada más funciona). Sin la 002 fallan el alta de alumnos y el cambio de co
   ```
 
 - [ ] **Leer la salida de `aplicar_004`.** Lista los equipos de Práctica/Tarea que quedaron sin
-  espejo y los pares con integrantes distintos. Si hay datos reales en producción, revísalos
-  antes de seguir (ver `docs/LIMITACIONES.md` §4).
-- [ ] `docker compose logs server --tail 30` no muestra errores, y la primera línea del arranque
-  dice `TZ=America/Mexico_City, trust proxy=1`.
+  espejo y los pares con integrantes distintos. Si hay datos reales, revísalos antes de seguir
+  (ver `docs/LIMITACIONES.md` §4).
+- [ ] **Comparar el esquema migrado contra uno nuevo.** Las sesiones 14 a 16 probaron las
+  migraciones partiendo de esquemas del repositorio, no del real de producción. Se crea una base
+  `sgec_check` con el `schema.sql` del repositorio, se da al usuario de la aplicación permiso de
+  solo lectura sobre ella, y se comparan:
+
+  ```bash
+  docker compose exec -T db sh -c 'mysql -u root -p"$MYSQL_ROOT_PASSWORD" -e "CREATE DATABASE sgec_check CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"'
+  docker compose exec -T db sh -c 'mysql -u root -p"$MYSQL_ROOT_PASSWORD" sgec_check' < server/db/schema.sql
+  docker compose exec -T db sh -c 'mysql -u root -p"$MYSQL_ROOT_PASSWORD" -e "GRANT SELECT ON sgec_check.* TO \`$MYSQL_USER\`@\`%\`"'
+  docker compose exec server node db/comparar_esquema.js sgec sgec_check
+  echo "código de salida: $?"
+  ```
+
+  - `Sin diferencias: los esquemas coinciden.` y código 0 → sigue.
+  - Cualquier diferencia (código 1) → **NO continúes**. Guarda la salida y revísala: la base real
+    no quedó como espera el código. El respaldo del paso 0 sigue siendo válido.
+  - Código 2 → no pudo comparar (por ejemplo, falta el permiso del `GRANT`); revisa el mensaje.
+
+  Al terminar, limpia:
+
+  ```bash
+  docker compose exec -T db sh -c 'mysql -u root -p"$MYSQL_ROOT_PASSWORD" -e "REVOKE SELECT ON sgec_check.* FROM \`$MYSQL_USER\`@\`%\`; DROP DATABASE sgec_check"'
+  ```
+
+- [ ] `docker compose logs server --tail 30` no muestra errores, y la línea del arranque dice
+  `TZ=America/Mexico_City, trust proxy=1`.
 
 ## 4. Rotar los secretos
 
@@ -103,11 +205,11 @@ conocidos por terceros: borrarlos de los archivos no basta.
   hacerlo en MySQL **y** en el `.env` (el volumen ya existe, así que cambiar solo el `.env` no
   cambia la contraseña real): dentro de `docker compose exec db mysql -u root -p`, ejecutar
   `ALTER USER` para `root` y para el usuario de la aplicación, y después actualizar
-  `DB_PASSWORD` en el `.env` y `docker compose up -d`.
+  `DB_PASSWORD` en el `.env` y `docker compose up -d`. (En la ruta B esto ya quedó hecho.)
 - [ ] Si alguna vez se subió al servidor una contraseña SMTP, verificar que no esté en el
   repositorio y cambiarla si lo estuvo.
 
-## 5. Cuentas: crear el administrador real y retirar las de ejemplo
+## 5. Cuentas: administrador real, cuentas de demostración y retiro de las de ejemplo
 
 - [ ] Crear el Administrador real (la contraseña no queda en el historial de la terminal; mínimo
   12 caracteres con mayúscula, minúscula y número):
@@ -119,19 +221,29 @@ conocidos por terceros: borrarlos de los archivos no basta.
   ```
 
 - [ ] Entrar al dominio con esa cuenta y comprobar que abre Gestión de Profesores.
+- [ ] **Antes de desactivar las cuentas de ejemplo**, crear cuentas de demostración propias, con
+  contraseñas fuertes que no estén en ningún archivo, para poder enseñar el sistema:
+  - Profesor: como Administrador, en Gestión de Profesores → alta de un profesor de
+    demostración (`@ipn.mx`) con una contraseña fuerte.
+  - Alumno: los alumnos los da de alta un Profesor. Entra con el profesor de demostración, crea
+    una materia en el semestre activo (si no hay semestre, créalo antes como Administrador en
+    Semestres) y en Alumnos da de alta un alumno de demostración (`@alumno.ipn.mx`). La pantalla
+    muestra **una sola vez** su contraseña temporal: entra con ella y cámbiala por una fuerte en
+    Perfil (el sistema lo exige).
+  - Guarda esas contraseñas en un gestor de contraseñas, no en el repositorio.
 - [ ] Ver qué cuentas de ejemplo existen en producción (`admin@ipn.mx`, `mgarcia@ipn.mx`,
   `s.ramirez@alumno.ipn.mx` — sus contraseñas están publicadas):
 
   ```bash
-  docker compose exec db mysql -u root -p sgec -e "SELECT id_usuario, correo_institucional, rol, activo FROM usuario WHERE correo_institucional IN ('admin@ipn.mx','mgarcia@ipn.mx','s.ramirez@alumno.ipn.mx');"
+  docker compose exec -T db sh -c 'mysql -u root -p"$MYSQL_ROOT_PASSWORD" sgec -e "SELECT id_usuario, correo_institucional, rol, activo FROM usuario WHERE correo_institucional IN (\"admin@ipn.mx\",\"mgarcia@ipn.mx\",\"s.ramirez@alumno.ipn.mx\")"'
   ```
 
 - [ ] Para cada una, decidir:
   - **Es de ejemplo y no se usa:** desactivarla (baja lógica; no se borra nada y deja de poder
-    entrar en ese instante):
+    entrar en ese instante, incluso con una sesión abierta):
 
     ```bash
-    docker compose exec db mysql -u root -p sgec -e "UPDATE usuario SET activo = FALSE WHERE correo_institucional IN ('admin@ipn.mx','mgarcia@ipn.mx','s.ramirez@alumno.ipn.mx');"
+    docker compose exec -T db sh -c 'mysql -u root -p"$MYSQL_ROOT_PASSWORD" sgec -e "UPDATE usuario SET activo = FALSE WHERE correo_institucional IN (\"admin@ipn.mx\",\"mgarcia@ipn.mx\",\"s.ramirez@alumno.ipn.mx\")"'
     ```
 
     Quita de la lista las que sí se usen.
@@ -141,19 +253,30 @@ conocidos por terceros: borrarlos de los archivos no basta.
 
 ## 6. Red
 
-- [ ] Cerrar el puerto 3001 en el cortafuegos (`ufw deny 3001`, o en el panel del proveedor).
-  Docker no pasa por `ufw`, así que la protección real es que Compose ya lo publica solo en
-  `127.0.0.1`; esto es una segunda barrera.
-- [ ] Comprobarlo **desde otra máquina** (tu computadora, no el servidor):
-  `curl -m 5 http://<tu-dominio>:3001/api/health` debe agotar el tiempo o ser rechazado.
-- [ ] Desde el servidor sí responde: `curl http://127.0.0.1:3001/api/health` → `{"status":"ok"}`
+- [ ] Cerrar los puertos 3001 y 4000 en el cortafuegos (`ufw deny 3001 && ufw deny 4000`, o en el
+  panel del proveedor). Docker no pasa por `ufw`, así que la protección real es que Compose ya
+  los publica solo en `127.0.0.1`; esto es una segunda barrera.
+- [ ] Comprobarlo **desde otra máquina** (tu computadora o el teléfono con datos, no el servidor).
+  Ambos deben agotar el tiempo o ser rechazados:
+
+  ```bash
+  curl -m 5 http://<tu-dominio>:3001/api/health
+  curl -m 5 http://<tu-dominio>:4000/
+  ```
+
+- [ ] Desde el servidor sí responden: `curl http://127.0.0.1:3001/api/health` →
+  `{"status":"ok"}` y `curl -sI http://127.0.0.1:4000/ | head -1` → `HTTP/1.1 200 OK`.
 
 ## 7. Verificación funcional en el dominio
 
+- [ ] **La API se llama en el dominio, no en `localhost`.** Abre `https://<tu-dominio>` con las
+  herramientas del navegador abiertas (F12), pestaña **Red**, e inicia sesión. La petición
+  `login` debe ir a `https://<tu-dominio>/api/auth/login` y responder 200. Si va a
+  `localhost:3001`, el frontend se construyó con un `VITE_API_URL` equivocado: corrige el `.env`
+  (paso 2) y reconstruye **solo el cliente**: `docker compose up -d --build client`.
 - [ ] `/api/dashboard` responde 200: entra como Profesor y abre el Dashboard (carga con datos, sin
-  mensaje de error). En las herramientas del navegador, pestaña Red, la petición `dashboard`
-  devuelve 200.
-- [ ] Recorrer los tres roles:
+  mensaje de error). En la pestaña Red, la petición `dashboard` devuelve 200.
+- [ ] Recorrer los tres roles con `docs/PRUEBAS-MANUALES.md` (como mínimo):
   - **Administrador:** Gestión de Profesores, Semestres, Materias, Accesos de alumnos.
   - **Profesor:** Dashboard, Materias, Alumnos, Equipos, Actividades, Bandeja de Entregas,
     Reportes (descargar PDF y Excel), Tablón.
@@ -168,21 +291,33 @@ conocidos por terceros: borrarlos de los archivos no basta.
   contenedores corrían en UTC, antes se veían 6 horas adelantadas. Esto no se pudo comprobar
   sin acceso al servidor; anota lo que observes.
 
-## 8. Límite de inicios de sesión con la IP real
+## 8. Límite de inicios de sesión con la IP real — hazlo al final
 
-- [ ] Desde tu computadora, intentar entrar 6 veces seguidas con una contraseña incorrecta. El
-  sexto intento debe decir "Demasiados intentos de inicio de sesión".
+Este paso bloquea, durante 15 minutos y **desde tu IP**, el correo con el que lo pruebes. Usa un
+correo inventado (no el de una cuenta real) y déjalo para el final. Si algo sale distinto de lo
+esperado y te quedas sin poder entrar, usa el teléfono con datos móviles (otra IP) mientras pasa
+la ventana.
+
+- [ ] Desde tu computadora, intentar entrar **6 veces seguidas con el MISMO correo inventado**
+  (por ejemplo `prueba-limite@ipn.mx`, rol Profesor) y cualquier contraseña. Los cinco primeros
+  dicen "Correo o contraseña incorrectos"; el sexto, "Demasiados intentos de inicio de sesión".
+- [ ] Inmediatamente después, desde la misma computadora, entrar con tu cuenta real: **debe
+  funcionar**. El límite es por IP + correo, así que bloquear un correo no bloquea a los demás
+  usuarios que salen por la misma IP (un salón de ESCOM, por ejemplo).
 - [ ] En el servidor: `docker compose logs server | grep rate-limit`. La línea debe mostrar **tu
   IP pública**, no una `172.x.x.x` (la red interna de Docker) ni `127.0.0.1`:
 
   ```
-  [rate-limit] login: límite alcanzado para la IP <tu IP pública>
+  [rate-limit] login: límite alcanzado para la IP <tu IP pública> (correo @ipn.mx)
   ```
 
-- [ ] Mientras tu IP está bloqueada, otra persona en otra red (o tu teléfono con datos móviles)
-  sí puede iniciar sesión. Si también queda bloqueada, a Nginx le falta la cabecera
-  `X-Forwarded-For` del paso 1. Si en el log aparece una dirección que no es la tuya,
-  revisa si hay otro proxy delante (por ejemplo, un CDN): entonces `TRUST_PROXY` debe ser 2.
+- [ ] Si en el log aparece `172.x.x.x` o `127.0.0.1`, a Nginx le falta la cabecera
+  `X-Forwarded-For` del paso 2. Si aparece una dirección que no es la tuya, revisa si hay otro
+  proxy delante (por ejemplo, un CDN): entonces `TRUST_PROXY` debe ser 2.
+
+Valores de referencia (ventanas de 15 minutos): inicio de sesión, 5 fallos por IP + correo y 50
+fallos por IP; "olvidé mi contraseña", 3 solicitudes por IP + correo y 30 por IP; resto de la
+API, 600 peticiones por usuario (o por IP sin sesión).
 
 ## 9. Certificado
 
@@ -196,18 +331,66 @@ conocidos por terceros: borrarlos de los archivos no basta.
 - [ ] Valorar pasar el repositorio de GitHub a **privado** (Settings → General → Danger Zone →
   Change visibility). Aun así los secretos anteriores ya se rotaron en el paso 4, que es lo que
   de verdad protege.
-- [ ] Guardar el respaldo del paso 0 fuera del servidor.
-- [ ] Anotar aquí la fecha y quién ejecutó el checklist: ________________________________
+- [ ] Guardar los respaldos del paso 0 fuera del servidor.
+- [ ] Anotar aquí la fecha, la ruta elegida (A o B) y quién ejecutó el checklist:
+  ________________________________
+
+---
+
+## Ruta B: recrear la base desde cero (solo si el paso 1 lo permite)
+
+Sustituye los pasos 2 (solo la parte de reconstruir), 3 y la rotación de la contraseña de MySQL
+del paso 4. Se elimina **únicamente el volumen de la base de datos**; el de archivos subidos no
+se toca (sus archivos de ejemplo quedan huérfanos, sin efecto). El respaldo del paso 0 es la
+forma de volver atrás.
+
+- [ ] Haz primero la revisión de Nginx y del `.env` del paso 2 (sin reconstruir todavía).
+- [ ] En el `.env`, pon desde ya un `DB_PASSWORD` nuevo (`openssl rand -base64 24`) y un
+  `JWT_SECRET` nuevo (`openssl rand -base64 48`): el volumen nuevo se inicializa con esa
+  contraseña, así que no hará falta el `ALTER USER` del paso 4. `chmod 600 .env`.
+- [ ] Actualizar el código y confirmar que el compose monta el esquema en la inicialización:
+
+  ```bash
+  git pull
+  docker compose config | grep docker-entrypoint-initdb.d
+  # debe mostrar: target: /docker-entrypoint-initdb.d/01_schema.sql
+  ```
+
+- [ ] Ver el nombre exacto del volumen de la base y eliminarlo:
+
+  ```bash
+  docker volume ls | grep db_data     # p. ej. sgec_sgec_db_data
+  docker compose down                 # detiene y quita los contenedores; NO borra volúmenes
+  docker volume rm sgec_sgec_db_data  # usa el nombre que salió arriba; NO el de uploads
+  docker compose up -d --build
+  docker compose ps                   # esperar a que sgec_db diga "healthy"
+  ```
+
+  Nunca uses `docker compose down -v`: borraría también el volumen de archivos subidos.
+- [ ] La base nueva ya tiene el esquema completo (migraciones incluidas). Comprobarlo:
+  `docker compose exec -T db sh -c 'mysql -u root -p"$MYSQL_ROOT_PASSWORD" sgec -e "SHOW TABLES"'`
+  lista 16 tablas, y `docker compose exec server node db/migrations/aplicar_005.js` dice que la
+  columna ya existe.
+- [ ] Revisar los puertos como en el paso 2 (`docker compose ps --format ...`).
+- [ ] Crear el Administrador real con `create_admin.js` (paso 5) y las cuentas de demostración.
+  No hay cuentas de ejemplo que desactivar.
+- [ ] Sigue en el paso 6.
 
 ---
 
 ## Si algo sale mal
 
 - **Todo responde 500 después de iniciar sesión:** falta la migración 005 (paso 3).
+- **El inicio de sesión falla en todos los navegadores y la pestaña Red muestra `localhost`:**
+  `VITE_API_URL` equivocado; corrige el `.env` y `docker compose up -d --build client` (paso 7).
 - **`sgec_server` se reinicia sin parar:** `docker compose logs server --tail 20`. Lo habitual es
   un `JWT_SECRET` de menos de 32 caracteres o una variable faltante en el `.env`.
-- **502 en el dominio:** Nginx no alcanza los contenedores. Revisa el paso 1 (`127.0.0.1`, no
+- **502 en el dominio:** Nginx no alcanza los contenedores. Revisa el paso 2 (`127.0.0.1`, no
   `localhost`) y `docker compose ps`.
 - **Volver atrás:** `git checkout <commit anotado en el paso 0> && docker compose up -d --build`.
   Las migraciones solo agregan columnas, así que el código anterior sigue funcionando con la
-  base ya migrada. Los datos no se tocan; el respaldo del paso 0 es la última red.
+  base ya migrada. Los datos no se tocan; el respaldo del paso 0 es la última red. Antes del
+  siguiente `git pull`, regresa a la rama: `git checkout main` (con un commit suelto, `git pull`
+  falla).
+- **Restaurar el respaldo** (último recurso; reemplaza los datos actuales de `sgec`):
+  `docker compose exec -T db sh -c 'mysql -u root -p"$MYSQL_ROOT_PASSWORD" sgec' < ~/sgec-respaldo-<fecha>.sql`

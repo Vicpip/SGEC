@@ -1,7 +1,6 @@
 const express = require('express')
 const cors = require('cors')
 const helmet = require('helmet')
-const rateLimit = require('express-rate-limit')
 
 const { validateEnv } = require('./config/env')
 const authRoutes = require('./routes/auth.routes')
@@ -17,7 +16,7 @@ const avisosRoutes = require('./routes/avisos.routes')
 const reportesRoutes = require('./routes/reportes.routes')
 const dashboardRoutes = require('./routes/dashboard.routes')
 const archivosRoutes = require('./routes/archivos.routes')
-const { alExcederLimite } = require('./utils/limitePeticiones')
+const { limitadorGeneral } = require('./utils/limitePeticiones')
 
 const env = validateEnv()
 const app = express()
@@ -30,19 +29,9 @@ app.use(helmet())
 app.use(cors({ origin: env.clientUrl }))
 app.use(express.json())
 
-// Límite general de peticiones por IP; los endpoints sensibles de auth.routes.js
-// tienen límites más estrictos propios.
-app.use(
-  '/api',
-  rateLimit({
-    windowMs: 15 * 60 * 1000,
-    limit: 300,
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: { error: 'Demasiadas peticiones. Intenta de nuevo más tarde.' },
-    handler: alExcederLimite('api'),
-  })
-)
+// Límite general de peticiones: por usuario autenticado, o por IP sin token válido (ver
+// utils/limitePeticiones.js). Los endpoints sensibles de auth.routes.js tienen límites propios.
+app.use('/api', limitadorGeneral(env.jwt.secret))
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok' })

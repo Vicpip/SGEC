@@ -1,10 +1,9 @@
 const { Router } = require('express')
-const rateLimit = require('express-rate-limit')
 const authController = require('../controllers/auth.controller')
 const authMiddleware = require('../middlewares/auth.middleware')
 const { validateBody } = require('../middlewares/validate.middleware')
 const asyncHandler = require('../utils/asyncHandler')
-const { alExcederLimite } = require('../utils/limitePeticiones')
+const { limitadoresLogin, limitadoresForgotPassword } = require('../utils/limitePeticiones')
 const {
   loginSchema,
   forgotPasswordSchema,
@@ -14,34 +13,21 @@ const {
 
 const router = Router()
 
-// Límites estrictos sobre los endpoints públicos de credenciales, más allá del
-// límite general de app.js, para frenar fuerza bruta y enumeración de correos.
-const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 5,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Demasiados intentos de inicio de sesión. Intenta de nuevo más tarde.' },
-  handler: alExcederLimite('login'),
-})
+// Límites estrictos sobre los endpoints públicos de credenciales, más allá del límite general
+// de app.js, para frenar fuerza bruta y enumeración de correos. Cuentan por IP + correo y por
+// IP sola (ver utils/limitePeticiones.js). Van después de validateBody para que la clave use el
+// correo ya validado.
+const loginLimiter = limitadoresLogin()
+const forgotPasswordLimiter = limitadoresForgotPassword()
 
-const forgotPasswordLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 3,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Demasiadas solicitudes. Intenta de nuevo más tarde.' },
-  handler: alExcederLimite('forgot-password'),
-})
-
-router.post('/login', loginLimiter, validateBody(loginSchema), asyncHandler(authController.login))
+router.post('/login', validateBody(loginSchema), loginLimiter, asyncHandler(authController.login))
 router.get('/me', authMiddleware, asyncHandler(authController.me))
 router.post('/logout', authMiddleware, asyncHandler(authController.logout))
 
 router.post(
   '/forgot-password',
-  forgotPasswordLimiter,
   validateBody(forgotPasswordSchema),
+  forgotPasswordLimiter,
   asyncHandler(authController.forgotPassword)
 )
 router.post(
