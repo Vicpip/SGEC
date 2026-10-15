@@ -192,15 +192,18 @@ alumnos y B6 formaría 2 equipos sin sobrantes).
 
 ## E. Equipos configurables (solo si se despliega la rama `feature/equipos-configurables`)
 
-Bloque de la sesión E1. La lógica se probó por la API contra una base temporal (53
-comprobaciones, `docs/cierre/E1.md`); **ninguna de estas pantallas se abrió en el navegador**.
+Bloques de las sesiones E1 (E1–E7) y E2 (E8–E12). La lógica se probó por la API contra bases
+temporales (53 comprobaciones en `docs/cierre/E1.md`, 88 en `docs/cierre/E2.md`); **ninguna de estas
+pantallas se abrió en el navegador**.
 Requiere la migración 008 aplicada. Con el profesor de demostración y una materia de prueba nueva
 con al menos 9 alumnos.
 
 - [ ] **E1. Formulario de materias.** Materias → Nueva materia → al final aparece "Configuración
   de equipos", plegada, con el resumen "(equipos de 3; de 3 a 4 integrantes)". Al abrirla: tamaño
-  automático 3, mínimo 3, máximo 4; la regla de repetición y las casillas de tipos (Práctica,
-  Tarea, Proyecto, las tres marcadas) se ven deshabilitadas y marcadas "(próximamente)". Como
+  automático 3, mínimo 3, máximo 4; la regla de repetición está habilitada con "No repetir
+  dentro del mismo tipo (Práctica y Tarea comparten equipo)" y un texto de ayuda debajo; las
+  casillas de tipos (Práctica, Tarea, Proyecto, las tres marcadas) se ven deshabilitadas y marcadas
+  "(próximamente)". Como
   **Administrador**, el mismo formulario **no** muestra la sección.
 - [ ] **E2. Validación en el formulario.** Poner mínimo 5 con tamaño 3 y guardar → no se guarda;
   la sección se abre y aparece "Configuración de equipos: debe cumplirse 1 ≤ mínimo ≤ tamaño
@@ -221,6 +224,28 @@ con al menos 9 alumnos.
   "Desactiva los equipos de esta materia antes de cambiar su configuración" (probado por la API).
 - [ ] **E7. Materias anteriores.** Una materia que existía antes de la migración → la sección
   muestra 3, 3 y 4, y Equipos se comporta como en B6 y B7.
+- [ ] **E8. Elegir la regla A.** Con una materia de prueba **sin equipos** y al menos 9 alumnos:
+  editarla → Configuración de equipos → regla "No repetir entre bloques: quien está en
+  Práctica/Tarea no puede estar en Proyecto" → guardar. Al volver a abrirla, el resumen de la
+  sección termina en "; sin repetir entre bloques" y el selector conserva la opción.
+- [ ] **E9. Crear equipo con la regla A.** Crear Equipo → tipo Práctica → elegir 3 alumnos →
+  guardar. Volver a Crear Equipo → tipo Proyecto: esos 3 alumnos **no aparecen** en la lista y el
+  texto de ayuda añade "En esta materia no se muestran los alumnos que ya están en un equipo del
+  otro bloque…". Crear un equipo de Proyecto con otros 3 → en tipo Práctica y en tipo Tarea, esos 3
+  tampoco aparecen. Si ya no queda nadie, el aviso dice "…todos ya tienen equipo de Práctica/Tarea o
+  de Proyecto, y la regla de la materia no permite estar en ambos."
+- [ ] **E10. Editar equipo con la regla A.** Detalle del equipo de Práctica → Editar → aparece el
+  aviso "En esta materia un alumno no puede estar a la vez en un equipo de Práctica/Tarea y en uno
+  de Proyecto…" y la lista no incluye a los alumnos del equipo de Proyecto (sí a los del propio
+  equipo).
+- [ ] **E11. Regla bloqueada con equipos.** Editar la materia → con equipos activos el selector de
+  regla aparece deshabilitado y el aviso dice "…desactívalos para cambiar el tamaño, el mínimo o la
+  regla de repetición…".
+- [ ] **E12. Lo que ve el alumno.** Publicar en esa materia una actividad de Proyecto para todos
+  los equipos y otra de Práctica para todos. Entrar como un alumno del equipo de Práctica: en su
+  panel y en Mis actividades aparece la de Práctica y **no** la de Proyecto; un alumno del equipo de
+  Proyecto ve solo la de Proyecto. Un alumno inscrito sin equipo no ve ninguna de las dos. (Por la
+  API, abrir la de Proyecto con el alumno de Práctica responde 403.)
 
 ---
 

@@ -28,6 +28,7 @@ const path = require('path')
 const pool = require('../config/db')
 const { validateEnv } = require('../config/env')
 const { condicionVisibleAlumnoSQL } = require('../services/publicacion.service')
+const { condicionActividadDirigidaAlumnoSQL } = require('../services/destinoActividad.service')
 
 const env = validateEnv()
 
@@ -92,9 +93,9 @@ async function resolverActividad(idArchivo, usuario) {
   const [dirigida] = await pool.query(
     `SELECT 1 FROM actividad act
      WHERE act.id_actividad = ?
-       AND (act.todos_los_equipos = TRUE OR act.id_equipo IN (SELECT id_equipo FROM equipo_alumno WHERE id_alumno = ?))
+       AND ${condicionActividadDirigidaAlumnoSQL('act')}
      LIMIT 1`,
-    [archivo.id_actividad, idAlumno]
+    [archivo.id_actividad, idAlumno, idAlumno]
   )
   return dirigida.length > 0 ? { status: 200, archivo } : { status: 403 }
 }

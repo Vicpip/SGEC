@@ -23,6 +23,7 @@
 const fs = require('fs')
 const pool = require('../config/db')
 const { esVisibleParaAlumno } = require('../services/publicacion.service')
+const { tipoEquipoParaActividad } = require('../services/destinoActividad.service')
 
 async function obtenerIdProfesorPropio(idUsuario) {
   const [rows] = await pool.query('SELECT id_profesor FROM profesor WHERE id_usuario = ?', [idUsuario])
@@ -32,14 +33,6 @@ async function obtenerIdProfesorPropio(idUsuario) {
 async function obtenerIdAlumnoPropio(idUsuario) {
   const [rows] = await pool.query('SELECT id_alumno FROM alumno WHERE id_usuario = ?', [idUsuario])
   return rows[0]?.id_alumno ?? null
-}
-
-// 'Practica' y 'Tarea' comparten integrantes; 'En clase' se asigna a los mismos equipos
-// que 'Tarea' (ver CLAUDE.md — reglas críticas de negocio).
-function tipoEquipoParaActividad(tipoActividad) {
-  if (tipoActividad === 'Proyecto') return 'Proyecto'
-  if (tipoActividad === 'Practica') return 'Practica'
-  return 'Tarea'
 }
 
 async function obtenerActividadConMateria(idActividad) {
@@ -113,12 +106,16 @@ async function equiposObjetivoDeActividad(actividad, soloIdEquipo) {
   return { equipos, integrantes }
 }
 
+// Equipo ACTIVO del alumno al que va dirigida la actividad, o null. Un equipo desactivado ya
+// no cuenta: el alumno deja de ver la actividad y no puede entregarla (sus calificaciones
+// previas se conservan).
 async function idEquipoDelAlumnoParaActividad(actividad, idAlumno) {
   if (!actividad.todos_los_equipos) {
-    const [pertenece] = await pool.query('SELECT 1 FROM equipo_alumno WHERE id_equipo = ? AND id_alumno = ? LIMIT 1', [
-      actividad.id_equipo,
-      idAlumno,
-    ])
+    const [pertenece] = await pool.query(
+      `SELECT 1 FROM equipo_alumno ea JOIN equipo eq ON eq.id_equipo = ea.id_equipo
+       WHERE ea.id_equipo = ? AND ea.id_alumno = ? AND eq.activo = TRUE LIMIT 1`,
+      [actividad.id_equipo, idAlumno]
+    )
     return pertenece.length > 0 ? actividad.id_equipo : null
   }
 

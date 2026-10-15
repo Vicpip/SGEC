@@ -19,17 +19,13 @@ import * as equiposService from '../../services/equipos.service'
 import * as alumnosService from '../../services/alumnos.service'
 import * as calificacionesService from '../../services/calificaciones.service'
 import { rangoIntegrantes, textoRango } from '../../utils/rangoIntegrantes'
+import { idsAlumnosOcupados } from '../../utils/reglaRepeticion'
 
 const TIPO_ACTIVIDAD_VARIANT = { 'En clase': 'gray', Practica: 'blue', Tarea: 'navy', Proyecto: 'orange' }
 const TIPO_ACTIVIDAD_LABEL = { 'En clase': 'En clase', Practica: 'Práctica', Tarea: 'Tarea', Proyecto: 'Proyecto' }
 
 const TIPO_VARIANT = { Practica: 'blue', Tarea: 'navy', Proyecto: 'orange' }
 const TIPO_LABEL = { Practica: 'Práctica', Tarea: 'Tarea', Proyecto: 'Proyecto' }
-const TIPOS_ESPEJO = ['Practica', 'Tarea']
-
-function tiposExcluidos(tipo) {
-  return TIPOS_ESPEJO.includes(tipo) ? TIPOS_ESPEJO : [tipo]
-}
 
 function iniciales(persona) {
   return `${persona.nombre?.[0] ?? ''}${persona.apellido_paterno?.[0] ?? ''}`.toUpperCase()
@@ -103,18 +99,15 @@ export default function DetalleEquipo() {
 
   const elegibles = useMemo(() => {
     if (!equipo) return []
-    const tiposAExcluir = tiposExcluidos(equipo.tipo)
-    // Excluye tanto el propio equipo como su espejo (la fila de Práctica/Tarea enlazada
-    // por id_equipo_espejo, que comparte integrantes) — de lo contrario sus propios
-    // integrantes aparecerían como ya ocupados y desaparecerían del pool elegible.
-    const idsConEquipo = new Set(
-      equiposMateria
-        .filter(
-          (eq) =>
-            tiposAExcluir.includes(eq.tipo) && eq.id_equipo !== equipo.id_equipo && eq.id_equipo !== equipo.id_equipo_espejo
-        )
-        .flatMap((eq) => eq.integrantes.map((it) => it.id_alumno))
-    )
+    // Según la regla de repetición de la materia ('B' por defecto; con 'A' también quedan
+    // fuera los alumnos del otro bloque). Excluye tanto el propio equipo como su espejo (la
+    // fila de Práctica/Tarea enlazada por id_equipo_espejo, que comparte integrantes) — de lo
+    // contrario sus propios integrantes aparecerían como ya ocupados y desaparecerían del pool
+    // elegible.
+    const idsConEquipo = idsAlumnosOcupados(equiposMateria, equipo.tipo, equipo.regla_repeticion ?? 'B', [
+      equipo.id_equipo,
+      equipo.id_equipo_espejo,
+    ])
     return alumnosMateria.filter((al) => !idsConEquipo.has(al.id_alumno))
   }, [alumnosMateria, equiposMateria, equipo])
 
@@ -262,6 +255,22 @@ export default function DetalleEquipo() {
                 >
                   Los cambios de nombre e integrantes se aplican también a su equipo de{' '}
                   {equipo.tipo === 'Practica' ? 'Tarea' : 'Práctica'}: ambos comparten integrantes. Elige {textoRango(rango)} alumnos.
+                </div>
+              )}
+              {equipo.regla_repeticion === 'A' && (
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: 'var(--gray-600)',
+                    marginBottom: 14,
+                    padding: '8px 12px',
+                    background: 'var(--blue-light)',
+                    borderRadius: 10,
+                    borderLeft: '3px solid var(--blue)',
+                  }}
+                >
+                  En esta materia un alumno no puede estar a la vez en un equipo de Práctica/Tarea y en uno de Proyecto: la
+                  lista no muestra a quienes ya están en el otro bloque.
                 </div>
               )}
               <div className="form-group">

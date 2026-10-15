@@ -13,6 +13,7 @@
 // una única fila y la marca individual = TRUE, sin afectar a sus compañeros.
 
 const pool = require('../config/db')
+const { tipoEquipoParaActividad } = require('../services/destinoActividad.service')
 
 async function obtenerIdProfesorPropio(idUsuario) {
   const [rows] = await pool.query('SELECT id_profesor FROM profesor WHERE id_usuario = ?', [idUsuario])
@@ -22,14 +23,6 @@ async function obtenerIdProfesorPropio(idUsuario) {
 async function obtenerIdAlumnoPropio(idUsuario) {
   const [rows] = await pool.query('SELECT id_alumno FROM alumno WHERE id_usuario = ?', [idUsuario])
   return rows[0]?.id_alumno ?? null
-}
-
-// 'Practica' y 'Tarea' comparten integrantes; 'En clase' se asigna a los mismos equipos
-// que 'Tarea' (ver CLAUDE.md — reglas críticas de negocio).
-function tipoEquipoParaActividad(tipoActividad) {
-  if (tipoActividad === 'Proyecto') return 'Proyecto'
-  if (tipoActividad === 'Practica') return 'Practica'
-  return 'Tarea'
 }
 
 function tiposActividadParaEquipo(tipoEquipo) {

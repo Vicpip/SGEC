@@ -1,8 +1,9 @@
 # Limitaciones conocidas — SGEC
 
 Documento iniciado en la Sesión 14 del plan de cierre (`PLAN-CIERRE.md`), actualizado en las
-Sesiones 15 y 16 y completado en la Sesión 17 (14 de octubre de 2026). Cada punto se contrastó
-con el código de esa fecha. Las secciones 1 a 6 vienen de pruebas reales de esas sesiones; de la
+Sesiones 15 y 16 y completado en la Sesión 17 (14 de octubre de 2026). En la rama
+`feature/equipos-configurables` se actualizaron §4, §7 y §8 (sesiones E1 y E2). Cada punto se
+contrastó con el código de esa fecha. Las secciones 1 a 6 vienen de pruebas reales de esas sesiones; de la
 7 en adelante se indica en cada una cómo se comprobó.
 
 Resumen:
@@ -15,7 +16,7 @@ Resumen:
 | 4 | Equipos de Práctica/Tarea anteriores a la Sesión 15 sin espejo | Datos heredados |
 | 5 | Dar de baja a un alumno que está en un equipo exige rehacer el equipo | Funcional |
 | 6 | Reporte: sobrantes, porcentaje sin tardías y promedio solo de lo calificado | Funcional (decisión 5) |
-| 7 | Regla de integrantes: requerimiento ambiguo, pendiente de confirmar con el asesor | Requerimiento (decisión 1) |
+| 7 | Regla de integrantes: requerimiento ambiguo, pendiente de confirmar con el asesor (en la rama, regla por materia y cambio de visibilidad del alumno) | Requerimiento (decisión 1) |
 | 8 | Arquitectura de equipos fija y sin validación de grupos en el Excel | Trabajo futuro (decisión 7) |
 | 9 | Sin pruebas automatizadas | Calidad |
 | 10 | Cliente sin configuración de ESLint | Calidad |
@@ -98,7 +99,10 @@ materia. Quedan **sin enlazar** (y el script `aplicar_004.js` los lista):
 - los nombres repetidos dentro de la misma materia y tipo.
 
 Un equipo sin espejo sigue funcionando, pero solo recibe las actividades de su propio tipo, se edita
-y desactiva solo, y en el reporte aparece como una fila "Práctica" o "Tarea" por separado. La
+y desactiva solo, y en el reporte aparece como una fila "Práctica" o "Tarea" por separado. En la
+rama `feature/equipos-configurables` (E2) se probó un equipo de Práctica sin su Tarea: sus
+integrantes ven las actividades de Práctica para todos los equipos, pero no las de Tarea ni las En
+clase (que van a los equipos de Tarea); el detalle de esas responde 403, igual que la entrega. La
 aplicación no ofrece una acción para crearle el espejo: hay que desactivarlo y volver a crearlo
 (lo razonable solo si todavía no tiene entregas).
 
@@ -137,7 +141,7 @@ mientras el asesor no lo confirme.
   tipo; "los otros 2 equipos" serían los demás equipos que se forman. Es la que implementa el
   sistema hoy.
 
-**Lo que hace el sistema hoy** (contrastado con `asignacion.service.js`,
+**Lo que hace el sistema en `main`** (contrastado con `asignacion.service.js`,
 `equipos.controller.js` y `schema.sql`, 14 de octubre de 2026):
 
 - **Única restricción:** un alumno no puede estar en dos equipos **activos** del mismo tipo dentro
@@ -164,23 +168,42 @@ también en uno de Proyecto, incluso con los mismos compañeros.
 La decisión 1 del plan de cierre conservó el diseño actual y solo corrigió su consistencia
 técnica; **queda pendiente confirmar con el asesor cuál de las dos lecturas aplica**.
 
-**Solución propuesta (trabajo futuro):** una configuración por materia en la que el profesor
-defina los tipos de equipo, el número de integrantes, si el trabajo es individual y la regla de
-repetición (lectura A, lectura B u otra). Así el sistema no tendría que fijar una sola
-interpretación. Exige rediseñar el modelo de datos (ver §8).
+**En la rama `feature/equipos-configurables` (sesión E2, sin fusionar a `main`)** la regla ya no
+es fija: cada materia elige la suya en `materia.regla_repeticion` (Materias → Configuración de
+equipos). Así el sistema no tiene que imponer una interpretación mientras el asesor no confirme:
 
-Mientras tanto, cambiar a la lectura A u otra regla fija no es menor. Tocaría, como mínimo
-(lista contrastada con el código):
+- **`B` (por defecto):** la regla de `main`, sin cambios. Toda materia existente queda en `B`.
+- **`A` (llamada A′ en el plan):** además, quien está en un equipo activo de Práctica/Tarea no
+  puede estar en uno de Proyecto, y viceversa. Se aplica en el alta, la edición y la generación
+  automática (`tiposExcluyentes()` en `asignacion.service.js`), con mensajes 409 y 422 que explican
+  la regla. Solo se cambia sin equipos activos en la materia (409).
+- **Lo que A′ no hace:** Práctica y Tarea siguen siendo el mismo equipo (espejo intacto). La
+  lectura A **estricta** (que un alumno de Práctica tampoco esté en Tarea) obligaría a dejar de crear
+  el equipo espejo, a cambiar la migración 004, los seeds, el reporte y a qué equipos van las
+  actividades En clase; sigue siendo **trabajo futuro** y no está planeada.
 
-- `asignacion.service.js` (`tiposEspejo()`, `tipoEspejoDe()`) y, en `equipos.controller.js`, el
-  alta manual, la edición, la desactivación y la generación automática.
-- La migración 004 (`004_equipo_espejo.sql`, `aplicar_004.js`), que enlaza los equipos existentes,
-  y los datos de demostración (`seeds/06_equipos.sql`).
-- El reporte (`reportes.controller.js`, que presenta el par Práctica/Tarea como una sola fila).
-- `tipoEquipoParaActividad()`, repetida en `actividades`, `entregas`, `calificaciones` y
-  `alumnos.controller.js` y en `PublicarActividad.jsx` (a qué equipos va cada tipo de actividad).
-- El panel del alumno (`dashboard.controller.js`) y las pantallas `ListaEquipos.jsx` y
-  `DetalleEquipo.jsx` (avisos y tarjetas del espejo).
+**Cambio de visibilidad para el alumno (rama, E2).** Con la regla `A` un alumno del bloque
+Práctica/Tarea no tiene equipo de Proyecto, y antes habría visto las actividades de Proyecto para
+todos los equipos sin poder abrirlas ni entregarlas. Por eso, en todas las materias (también las
+que siguen en `B`), un alumno solo ve una actividad si va dirigida a un equipo **activo** suyo
+(`condicionActividadDirigidaAlumnoSQL()` en `destinoActividad.service.js`): en su listado, en su
+panel (contadores y próximas), en los adjuntos y en el acceso directo (403). Comportamientos que
+cambian respecto de `main`:
+
+- Un alumno inscrito sin equipo del tipo que le toca (por ejemplo, inscrito después de formar los
+  equipos) ya no ve las actividades "para todos los equipos" de ese tipo. Antes las veía y al
+  abrirlas recibía 403 al entregar; ahora el detalle también responde 403.
+- Si se desactiva el equipo de un alumno, deja de ver las actividades dirigidas a ese equipo y ya
+  no puede entregarlas (`entregas.controller.js` también exige el equipo activo; antes la entrega
+  se aceptaba, comprobado con el código de `main`). Sus calificaciones previas siguen en "Mis
+  calificaciones" y en el promedio del panel.
+- La pantalla 09 del profesor (Ver Actividades del Alumno) muestra solo las actividades dirigidas a
+  ese alumno, con la misma condición. Antes listaba todas las actividades activas de la materia,
+  incluidas las de otros equipos específicos, y les ponía el nombre del equipo del alumno.
+- Un alumno que está en equipos de los dos bloques (lo normal con `B`) ve exactamente lo mismo que
+  antes (comparado contra una captura del código de `main` con los datos de demostración).
+
+El denominador del reporte no cambia: ya contaba por pares equipo–integrante.
 
 ## 8. Arquitectura de equipos fija y sin validación de grupos en el Excel (decisión 7)
 
@@ -195,13 +218,16 @@ Fuera del alcance del cierre, documentado como trabajo futuro:
     (`materia.equipo_tamano_auto`, `equipo_min`, `equipo_max`, de 1 a 10; por defecto 3 en la
     asignación automática y 3 o 4 en la manual, como antes). Solo se cambia sin equipos activos;
     el máximo también se puede ampliar con equipos activos.
-  - **Guardado, sin efecto todavía:** `materia.regla_repeticion` (`B` por defecto = la regla
-    actual; `A` = no repetir entre bloques) y `usa_practica`, `usa_tarea`, `usa_proyecto` (los
-    tres TRUE). El formulario de materias los muestra deshabilitados ("próximamente"); el sistema
-    sigue aplicando la regla B y los tres tipos en todas las materias.
-  - **Pendiente:** aplicar la regla A (Etapa 1b), los tipos activos (Etapa 2) y el trabajo
-    individual (Etapa 3). La lectura A "estricta" (que Práctica y Tarea tampoco compartan
-    alumnos) obligaría a dejar de crear el equipo espejo y no está planeada.
+  - **Hecho en E2 (Etapa 1b):** la **regla de repetición** por materia
+    (`materia.regla_repeticion`: `B` por defecto, `A` = no repetir entre los bloques
+    Práctica/Tarea y Proyecto; ver §7), con el filtro de alumnos elegibles en Crear Equipo y
+    Detalle del Equipo y el cambio de visibilidad del alumno descrito en §7.
+  - **Guardado, sin efecto todavía:** `usa_practica`, `usa_tarea`, `usa_proyecto` (los tres TRUE).
+    El formulario de materias los muestra deshabilitados ("próximamente"); el sistema sigue usando
+    los tres tipos en todas las materias.
+  - **Pendiente:** los tipos activos (Etapa 2) y el trabajo individual (Etapa 3). La lectura A
+    "estricta" (que Práctica y Tarea tampoco compartan alumnos) obligaría a dejar de crear el
+    equipo espejo y no está planeada.
 - **El grupo del Excel no se valida contra la materia.** `excel.service.js` exige que la columna
   `grupo` venga llena, pero no comprueba que coincida con el grupo de la materia a la que se
   importa: un alumno de 4CM2 puede quedar inscrito en una materia de 4CM1 si así viene en el

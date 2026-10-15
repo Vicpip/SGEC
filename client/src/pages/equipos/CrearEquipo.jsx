@@ -16,16 +16,10 @@ import { useSelectorMateria } from '../../hooks/useSelectorMateria'
 import * as alumnosService from '../../services/alumnos.service'
 import * as equiposService from '../../services/equipos.service'
 import { rangoIntegrantes, textoRango } from '../../utils/rangoIntegrantes'
+import { TIPOS_ESPEJO, idsAlumnosOcupados } from '../../utils/reglaRepeticion'
 
 const TIPOS = ['Practica', 'Tarea', 'Proyecto']
 const TIPO_LABEL = { Practica: 'Práctica', Tarea: 'Tarea', Proyecto: 'Proyecto' }
-// Practica y Tarea comparten integrantes (ver CLAUDE.md): un alumno con equipo de
-// cualquiera de esos dos tipos queda excluido del pool de elegibles del otro.
-const TIPOS_ESPEJO = ['Practica', 'Tarea']
-
-function tiposExcluidos(tipo) {
-  return TIPOS_ESPEJO.includes(tipo) ? TIPOS_ESPEJO : [tipo]
-}
 
 function iniciales(alumno) {
   return `${alumno.nombre?.[0] ?? ''}${alumno.apellido_paterno?.[0] ?? ''}`.toUpperCase()
@@ -85,13 +79,15 @@ export default function CrearEquipo() {
   // Rango de integrantes y tamaño automático de la materia elegida (3, 3 y 4 por defecto).
   const rango = rangoIntegrantes(materiaActual)
 
+  // Regla de repetición de la materia ('B' por defecto): Práctica y Tarea comparten integrantes,
+  // así que quien tiene equipo de uno queda fuera del otro; con 'A', tampoco se elige a quien
+  // ya está en el otro bloque (Práctica/Tarea o Proyecto).
+  const reglaRepeticion = materiaActual?.regla_repeticion ?? 'B'
+
   const elegibles = useMemo(() => {
-    const tiposAExcluir = tiposExcluidos(tipo)
-    const idsConEquipo = new Set(
-      equipos.filter((eq) => tiposAExcluir.includes(eq.tipo)).flatMap((eq) => eq.integrantes.map((it) => it.id_alumno))
-    )
+    const idsConEquipo = idsAlumnosOcupados(equipos, tipo, reglaRepeticion)
     return alumnos.filter((al) => !idsConEquipo.has(al.id_alumno))
-  }, [alumnos, equipos, tipo])
+  }, [alumnos, equipos, tipo, reglaRepeticion])
 
   useEffect(() => {
     setSeleccion((prev) => prev.filter((id) => elegibles.some((al) => al.id_alumno === id)))
@@ -274,7 +270,9 @@ export default function CrearEquipo() {
                   borderLeft: '3px solid var(--blue)',
                 }}
               >
-                No hay alumnos disponibles para tipo {TIPO_LABEL[tipo]} en esta materia (todos ya tienen equipo).
+                {reglaRepeticion === 'A'
+                  ? `No hay alumnos disponibles para tipo ${TIPO_LABEL[tipo]} en esta materia: todos ya tienen equipo de Práctica/Tarea o de Proyecto, y la regla de la materia no permite estar en ambos.`
+                  : `No hay alumnos disponibles para tipo ${TIPO_LABEL[tipo]} en esta materia (todos ya tienen equipo).`}
               </div>
             ) : (
               <>
@@ -290,6 +288,8 @@ export default function CrearEquipo() {
                   }}
                 >
                   Selecciona {textoRango(rango)} integrantes de la lista, o usa la asignación aleatoria (elige {rango.tamano}).
+                  {reglaRepeticion === 'A' &&
+                    ' En esta materia no se muestran los alumnos que ya están en un equipo del otro bloque (Práctica/Tarea o Proyecto).'}
                 </div>
                 {elegibles.map((al) => {
                   const marcado = seleccion.includes(al.id_alumno)

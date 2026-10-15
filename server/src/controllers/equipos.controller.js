@@ -1,5 +1,10 @@
 // Equipos colaborativos (un alumno no repite dentro de un mismo tipo). Pantallas 04, 05, 06.
 //
+// Regla de repetición: la define cada materia (materia.regla_repeticion, migración 008). Con 'B'
+// (por defecto) un alumno no repite dentro del mismo tipo y Práctica/Tarea cuentan como uno; con
+// 'A' tampoco puede estar a la vez en un equipo de Práctica/Tarea y en uno de Proyecto
+// (tiposExcluyentes en asignacion.service.js). Se aplica en crear, actualizar y generar.
+//
 // Tamaño: lo define cada materia (migración 008). La asignación automática forma equipos de
 // exactamente materia.equipo_tamano_auto; el alta y la edición manual admiten entre
 // materia.equipo_min y materia.equipo_max integrantes (3, 3 y 4 por defecto). Joi solo acota
@@ -16,7 +21,13 @@
 // id_alumno).
 
 const pool = require('../config/db')
-const { asignarEquiposAleatorio, tiposEspejo, tipoEspejoDe } = require('../services/asignacion.service')
+const {
+  asignarEquiposAleatorio,
+  tiposEspejo,
+  tiposExcluyentes,
+  nombreBloque,
+  tipoEspejoDe,
+} = require('../services/asignacion.service')
 const { resolverMateriaPorClave } = require('../services/materias.service')
 
 async function obtenerIdProfesorPropio(idUsuario) {
@@ -57,14 +68,17 @@ async function integrantesDeEquipos(idsEquipo) {
   return mapa
 }
 
-// Alumnos que ya tienen un equipo ACTIVO de alguno de los tipos "espejo" del tipo dado
-// (Practica y Tarea comparten integrantes, ver asignacion.service.js) dentro de la materia
-// indicada. Al editar, `idsExcluidos` trae el propio equipo y su espejo (por id, nunca por
-// nombre) — de lo contrario guardar un equipo sin cambios chocaría con su propio espejo.
-async function idsAlumnosConEquipoDeTipo(idMateria, tipo, idsExcluidos = []) {
-  const tipos = tiposEspejo(tipo)
+// Alumnos que ya tienen un equipo ACTIVO de un tipo que, según la regla de repetición de la
+// materia, les impide estar en un equipo de `tipo` (con 'B', los tipos "espejo": Practica y
+// Tarea comparten integrantes; con 'A', los tres tipos; ver asignacion.service.js). Al editar,
+// `idsExcluidos` trae el propio equipo y su espejo (por id, nunca por nombre) — de lo
+// contrario guardar un equipo sin cambios chocaría con su propio espejo.
+// Devuelve un Map id_alumno -> tipo del equipo que lo ocupa (si tiene uno del mismo bloque,
+// ese), para que el mensaje de error explique la regla.
+async function idsAlumnosConEquipoDeTipo(idMateria, tipo, regla, idsExcluidos = []) {
+  const tipos = tiposExcluyentes(tipo, regla)
   const params = [idMateria, tipos]
-  let sql = `SELECT DISTINCT ea.id_alumno
+  let sql = `SELECT DISTINCT ea.id_alumno, eq.tipo
              FROM equipo_alumno ea
              JOIN equipo eq ON eq.id_equipo = ea.id_equipo
              WHERE eq.id_materia = ? AND eq.tipo IN (?) AND eq.activo = TRUE`
@@ -73,7 +87,23 @@ async function idsAlumnosConEquipoDeTipo(idMateria, tipo, idsExcluidos = []) {
     params.push(idsExcluidos)
   }
   const [rows] = await pool.query(sql, params)
-  return new Set(rows.map((r) => r.id_alumno))
+  const mismoBloque = tiposEspejo(tipo)
+  const ocupados = new Map()
+  for (const r of rows) {
+    if (!ocupados.has(r.id_alumno) || mismoBloque.includes(r.tipo)) ocupados.set(r.id_alumno, r.tipo)
+  }
+  return ocupados
+}
+
+// Mensaje del 409 cuando un alumno ya está ocupado: el de siempre si el choque es dentro del
+// mismo bloque; si es con el otro bloque (solo con la regla 'A'), uno que explica la regla.
+function mensajeAlumnoOcupado(idAlumno, tipo, tipoOcupado, enEdicion) {
+  if (tiposEspejo(tipo).includes(tipoOcupado)) {
+    return enEdicion
+      ? `El alumno con id ${idAlumno} ya tiene otro equipo de tipo ${tipo} en esta materia`
+      : `El alumno con id ${idAlumno} ya tiene un equipo de tipo ${tipo} en esta materia`
+  }
+  return `El alumno con id ${idAlumno} ya está en un equipo de ${nombreBloque(tipoOcupado)}; en esta materia no puede estar también en uno de ${nombreBloque(tipo)}`
 }
 
 // Equipo (con el id_profesor dueño de su materia) y los ids de las filas sobre las que debe
@@ -82,7 +112,7 @@ async function idsAlumnosConEquipoDeTipo(idMateria, tipo, idsExcluidos = []) {
 async function obtenerEquipoParaEscritura(id) {
   const [rows] = await pool.query(
     `SELECT eq.id_equipo, eq.id_materia, eq.nombre, eq.tipo, eq.id_equipo_espejo, eq.activo, m.id_profesor,
-            m.equipo_min, m.equipo_max
+            m.equipo_min, m.equipo_max, m.regla_repeticion
      FROM equipo eq JOIN materia m ON m.id_materia = eq.id_materia
      WHERE eq.id_equipo = ?`,
     [id]
@@ -188,6 +218,7 @@ async function listar(req, res) {
       equipo_tamano_auto: materiaRow.equipo_tamano_auto,
       equipo_min: materiaRow.equipo_min,
       equipo_max: materiaRow.equipo_max,
+      regla_repeticion: materiaRow.regla_repeticion,
     },
   })
 }
@@ -198,7 +229,7 @@ async function obtener(req, res) {
   const [rows] = await pool.query(
     `SELECT eq.id_equipo, eq.id_materia, eq.nombre, eq.tipo, eq.id_equipo_espejo, eq.activo, eq.fecha_creacion,
             m.id_profesor, m.clave AS materia_clave, m.nombre AS materia_nombre, m.grupo AS materia_grupo,
-            m.equipo_tamano_auto, m.equipo_min, m.equipo_max
+            m.equipo_tamano_auto, m.equipo_min, m.equipo_max, m.regla_repeticion
      FROM equipo eq JOIN materia m ON m.id_materia = eq.id_materia
      WHERE eq.id_equipo = ?`,
     [id]
@@ -237,7 +268,7 @@ async function crear(req, res) {
 
   const idProfesor = await obtenerIdProfesorPropio(req.user.id_usuario)
   const [materiaRows] = await pool.query(
-    'SELECT id_materia, equipo_min, equipo_max FROM materia WHERE id_materia = ? AND id_profesor = ?',
+    'SELECT id_materia, equipo_min, equipo_max, regla_repeticion FROM materia WHERE id_materia = ? AND id_profesor = ?',
     [id_materia, idProfesor]
   )
   if (materiaRows.length === 0) {
@@ -257,10 +288,10 @@ async function crear(req, res) {
     return res.status(400).json({ error: 'Todos los integrantes deben estar inscritos en la materia' })
   }
 
-  const idsConEquipo = await idsAlumnosConEquipoDeTipo(id_materia, tipo)
+  const idsConEquipo = await idsAlumnosConEquipoDeTipo(id_materia, tipo, materiaRows[0].regla_repeticion)
   const conflicto = integrantes.find((id) => idsConEquipo.has(id))
   if (conflicto) {
-    return res.status(409).json({ error: `El alumno con id ${conflicto} ya tiene un equipo de tipo ${tipo} en esta materia` })
+    return res.status(409).json({ error: mensajeAlumnoOcupado(conflicto, tipo, idsConEquipo.get(conflicto), false) })
   }
 
   const tipoEspejo = tipoEspejoDe(tipo)
@@ -334,12 +365,10 @@ async function actualizar(req, res) {
     return res.status(400).json({ error: 'Todos los integrantes deben estar inscritos en la materia' })
   }
 
-  const idsConEquipo = await idsAlumnosConEquipoDeTipo(equipo.id_materia, equipo.tipo, ids)
+  const idsConEquipo = await idsAlumnosConEquipoDeTipo(equipo.id_materia, equipo.tipo, equipo.regla_repeticion, ids)
   const conflicto = integrantes.find((idAlumno) => idsConEquipo.has(idAlumno))
   if (conflicto) {
-    return res
-      .status(409)
-      .json({ error: `El alumno con id ${conflicto} ya tiene otro equipo de tipo ${equipo.tipo} en esta materia` })
+    return res.status(409).json({ error: mensajeAlumnoOcupado(conflicto, equipo.tipo, idsConEquipo.get(conflicto), true) })
   }
 
   const conexion = await pool.getConnection()
@@ -395,7 +424,7 @@ async function desactivar(req, res) {
 
 // Asignación aleatoria masiva: forma equipos de materia.equipo_tamano_auto integrantes (3 por
 // defecto) con los alumnos inscritos en la materia que todavía no tienen equipo del tipo
-// indicado (Practica/Tarea comparten integrantes y se crean como par enlazado por
+// indicado (con la regla 'A', tampoco del otro bloque; Practica/Tarea comparten integrantes y se crean como par enlazado por
 // id_equipo_espejo, ver asignacion.service.js). Los alumnos que sobran tras agrupar quedan sin
 // asignar y se reportan en `sin_asignar` — el profesor los agrega a mano a un equipo
 // existente (el alta/edición manual admite hasta materia.equipo_max).
@@ -404,24 +433,31 @@ async function generar(req, res) {
 
   const idProfesor = await obtenerIdProfesorPropio(req.user.id_usuario)
   const [materiaRows] = await pool.query(
-    'SELECT id_materia, equipo_tamano_auto FROM materia WHERE id_materia = ? AND id_profesor = ?',
+    'SELECT id_materia, equipo_tamano_auto, regla_repeticion FROM materia WHERE id_materia = ? AND id_profesor = ?',
     [id_materia, idProfesor]
   )
   if (materiaRows.length === 0) {
     return res.status(404).json({ error: 'Materia no encontrada' })
   }
   const tamano = Number(materiaRows[0].equipo_tamano_auto)
+  const regla = materiaRows[0].regla_repeticion
 
   const [inscritosRows] = await pool.query('SELECT id_alumno FROM materia_alumno WHERE id_materia = ? AND activo = TRUE', [id_materia])
   const idsInscritos = inscritosRows.map((r) => r.id_alumno)
 
-  const idsConEquipo = await idsAlumnosConEquipoDeTipo(id_materia, tipo)
+  const idsConEquipo = await idsAlumnosConEquipoDeTipo(id_materia, tipo, regla)
   const disponibles = idsInscritos.filter((id) => !idsConEquipo.has(id))
 
   if (disponibles.length < tamano) {
     let mensaje
     if (idsInscritos.length === 0) {
       mensaje = 'No hay alumnos inscritos en esta materia'
+    } else if (regla === 'A') {
+      // Regla entre bloques: quien ya está en Práctica/Tarea o en Proyecto no cuenta.
+      mensaje =
+        disponibles.length === 0
+          ? 'No hay alumnos disponibles: todos los alumnos inscritos ya tienen equipo de Práctica/Tarea o de Proyecto en esta materia, y su regla de repetición no permite estar en ambos'
+          : `Solo hay ${disponibles.length} alumno(s) sin equipo de Práctica/Tarea ni de Proyecto en esta materia (su regla de repetición no permite estar en ambos); se necesitan al menos ${tamano} para formar un equipo`
     } else if (disponibles.length === 0) {
       mensaje = `No hay alumnos disponibles: todos los alumnos inscritos ya tienen equipo de tipo ${tipo} en esta materia`
     } else {

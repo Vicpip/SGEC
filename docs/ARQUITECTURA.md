@@ -63,7 +63,11 @@ Servicios de negocio en `server/src/services/`:
 
 - **asignacion.service.js** — algoritmo de asignación aleatoria de integrantes a equipos de 3,
   entre los alumnos que aún no tienen equipo activo de ese tipo en la materia (Práctica y Tarea
-  cuentan como uno).
+  cuentan como uno). En la rama `feature/equipos-configurables`, `tiposExcluyentes()` aplica la
+  regla de repetición de la materia (`B` o `A`, ver `docs/LIMITACIONES.md` §7).
+- **destinoActividad.service.js** (rama `feature/equipos-configurables`) — a qué tipo de equipo va
+  cada tipo de actividad (`tipoEquipoParaActividad()`) y la condición SQL de "actividad dirigida al
+  alumno" (solo equipos activos suyos), compartida por actividades, panel, adjuntos y pantalla 09.
 - **excel.service.js** — parseo y validación fila por fila de listas de alumnos (`.xlsx`).
 - **reporte.service.js** — genera el buffer del reporte de desempeño en PDF (pdfkit) y Excel (xlsx).
 - **publicacion.service.js** — determina si una actividad programada ya es visible al alumno
@@ -168,6 +172,10 @@ usuario (1) ── (1) profesor ── (N) materia ── (N) equipo ── (N) 
   invisible para el Alumno hasta `fecha_publicacion` — el filtro vive en el `WHERE` SQL
   (`condicionVisibleAlumnoSQL` en `publicacion.service.js`), tanto en el listado como en el
   acceso directo por id (404, no 403, para no confirmar su existencia).
+- **Actividades dirigidas al alumno** (rama `feature/equipos-configurables`). El alumno solo ve una
+  actividad si va a un equipo **activo** suyo: con `todos_los_equipos`, si tiene equipo activo del
+  tipo correspondiente; si no, si el equipo destino es suyo y está activo (403 en el acceso directo).
+  Ver [API.md](./API.md#actividades) y `docs/LIMITACIONES.md` §7.
 - **Aviso global.** Un aviso con `id_materia = NULL` llega a todos los alumnos inscritos en
   cualquier materia **activa** (`estatus != 'Cerrada'`) del profesor que lo publica — la
   visibilidad se evalúa en cada lectura, no se congela al momento de publicar.

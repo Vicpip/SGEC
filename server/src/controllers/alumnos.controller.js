@@ -21,6 +21,7 @@ const bcrypt = require('bcryptjs')
 const pool = require('../config/db')
 const { parsearAlumnosDesdeExcel, validarAlumno } = require('../services/excel.service')
 const { resolverMateriaPorClave } = require('../services/materias.service')
+const { tipoEquipoParaActividad, condicionActividadDirigidaAlumnoSQL } = require('../services/destinoActividad.service')
 const { correoHabilitado, enviarCorreoBienvenida } = require('../services/email.service')
 const {
   RONDAS_BCRYPT,
@@ -314,15 +315,6 @@ async function obtener(req, res) {
   res.status(200).json({ alumno })
 }
 
-// Determina, por regla de negocio, qué tipo de equipo corresponde a cada tipo
-// de actividad: 'Practica' y 'Tarea' comparten integrantes; 'En clase' se
-// asigna a los mismos equipos que 'Tarea' (ver CLAUDE.md — reglas críticas).
-function tipoEquipoParaActividad(tipoActividad) {
-  if (tipoActividad === 'Proyecto') return 'Proyecto'
-  if (tipoActividad === 'Practica') return 'Practica'
-  return 'Tarea'
-}
-
 async function actividadesDeAlumno(req, res) {
   const { id } = req.params
   const idProfesor = await obtenerIdProfesorPropio(req.user.id_usuario)
@@ -370,8 +362,9 @@ async function actividadesDeAlumno(req, res) {
      LEFT JOIN entrega ent ON ent.id_actividad = act.id_actividad AND ent.id_alumno = ?
      LEFT JOIN calificacion cal ON cal.id_actividad = act.id_actividad AND cal.id_alumno = ?
      WHERE m.id_profesor = ? AND act.activo = TRUE
+       AND ${condicionActividadDirigidaAlumnoSQL('act')}
      ORDER BY act.fecha_limite DESC`,
-    [id, id, id, idProfesor]
+    [id, id, id, idProfesor, id, id]
   )
 
   const actividadesConEquipo = actividades.map((act) => {

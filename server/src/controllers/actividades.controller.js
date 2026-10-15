@@ -3,7 +3,8 @@
 // Regla de propiedad: un Profesor solo ve/crea/edita/desactiva actividades de materias donde
 // materia.id_profesor = su propio id_profesor (nunca el id_usuario del JWT directamente).
 // Un Alumno solo ve actividades de materias en las que está inscrito y dirigidas a él (todos
-// los equipos del tipo, o su propio equipo específico) — y NUNCA una actividad programada
+// los equipos del tipo si tiene un equipo activo de ese tipo, o su propio equipo específico
+// activo; condicionActividadDirigidaAlumnoSQL en destinoActividad.service.js) — y NUNCA una actividad programada
 // (programada = TRUE) antes de su fecha_publicacion. Ese filtro va en el WHERE del query
 // (ver condicionVisibleAlumnoSQL en publicacion.service.js), nunca solo en el frontend.
 
@@ -11,6 +12,7 @@ const fs = require('fs')
 const pool = require('../config/db')
 const { esVisibleParaAlumno, condicionVisibleAlumnoSQL } = require('../services/publicacion.service')
 const { resolverMateriaPorClave } = require('../services/materias.service')
+const { tipoEquipoParaActividad, condicionActividadDirigidaAlumnoSQL } = require('../services/destinoActividad.service')
 
 async function obtenerIdProfesorPropio(idUsuario) {
   const [rows] = await pool.query('SELECT id_profesor FROM profesor WHERE id_usuario = ?', [idUsuario])
@@ -20,14 +22,6 @@ async function obtenerIdProfesorPropio(idUsuario) {
 async function obtenerIdAlumnoPropio(idUsuario) {
   const [rows] = await pool.query('SELECT id_alumno FROM alumno WHERE id_usuario = ?', [idUsuario])
   return rows[0]?.id_alumno ?? null
-}
-
-// 'Practica' y 'Tarea' comparten integrantes; 'En clase' se asigna a los mismos equipos
-// que 'Tarea' (ver CLAUDE.md — reglas críticas de negocio).
-function tipoEquipoParaActividad(tipoActividad) {
-  if (tipoActividad === 'Proyecto') return 'Proyecto'
-  if (tipoActividad === 'Practica') return 'Practica'
-  return 'Tarea'
 }
 
 // Valida a qué equipo(s) se dirige la actividad. Devuelve null si el destino es válido o
@@ -112,9 +106,9 @@ async function listarParaAlumno(req, res) {
     // Punto crítico: una actividad programada con fecha_publicacion futura jamás debe
     // entrar en el resultset de un Alumno — filtrado aquí, en el WHERE, no después.
     condicionVisibleAlumnoSQL('act'),
-    '(act.todos_los_equipos = TRUE OR act.id_equipo IN (SELECT id_equipo FROM equipo_alumno WHERE id_alumno = ?))',
+    condicionActividadDirigidaAlumnoSQL('act'),
   ]
-  const paramsCondiciones = [idAlumno]
+  const paramsCondiciones = [idAlumno, idAlumno]
 
   if (materia) {
     condiciones.push('m.clave = ?')
@@ -229,14 +223,14 @@ async function obtener(req, res) {
       return res.status(404).json({ error: 'Actividad no encontrada' })
     }
 
-    if (!actividad.todos_los_equipos) {
-      const [pertenece] = await pool.query('SELECT 1 FROM equipo_alumno WHERE id_equipo = ? AND id_alumno = ? LIMIT 1', [
-        actividad.id_equipo,
-        idAlumno,
-      ])
-      if (pertenece.length === 0) {
-        return res.status(403).json({ error: 'No tienes permiso para ver esta actividad' })
-      }
+    // Dirigida a él: con todos_los_equipos, solo si tiene un equipo activo del tipo que le
+    // toca; si no, el equipo destino debe ser uno activo suyo. 403 en ambos casos.
+    const [dirigida] = await pool.query(
+      `SELECT 1 FROM actividad act WHERE act.id_actividad = ? AND ${condicionActividadDirigidaAlumnoSQL('act')} LIMIT 1`,
+      [id, idAlumno, idAlumno]
+    )
+    if (dirigida.length === 0) {
+      return res.status(403).json({ error: 'No tienes permiso para ver esta actividad' })
     }
   }
 

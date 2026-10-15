@@ -108,7 +108,7 @@ cualquiera.
 |---|---|---|---|
 | `equipo_tamano_auto` | entero 1–10 | 3 | Tamaño de los equipos de `POST /equipos/generar` |
 | `equipo_min`, `equipo_max` | enteros 1–10 | 3, 4 | Rango de integrantes en `POST` y `PUT /equipos` |
-| `regla_repeticion` | `B` / `A` | `B` | Solo se guarda (sin efecto todavía). `B` = no repetir dentro del mismo tipo, el comportamiento actual; `A` = no repetir entre bloques de equipos |
+| `regla_repeticion` | `B` / `A` | `B` | Regla de repetición de alumnos en `POST`, `PUT` y `generar` de `/equipos` (abajo). `B` = no repetir dentro del mismo tipo (Práctica y Tarea cuentan como uno), el comportamiento original; `A` = además, no repetir entre bloques: quien está en un equipo de Práctica/Tarea no puede estar en uno de Proyecto, y viceversa |
 | `usa_practica`, `usa_tarea`, `usa_proyecto` | booleanos | `true` | Solo se guardan (sin efecto todavía) |
 
 Los valores por defecto reproducen el comportamiento anterior. 400 (Joi, `{message, errores}`) si un
@@ -146,7 +146,7 @@ Pantallas 07, 08, 09. Un Profesor solo ve alumnos de materias donde es dueño.
 | GET | `/alumnos?materia=<clave>` | Profesor | opcionales `&semestre=` / `&id_materia=` | 200 `{alumnos, materia}` (`materia` incluye `semestre`); 400 falta `materia` o `id_materia` no numérico; 404 materia no encontrada/no propia |
 | GET | `/alumnos/buscar?q=<texto>` | Administrador | `q`: parte del correo institucional o de la boleta (mínimo 3 caracteres) | 200 `{alumnos}`: como máximo 10, cada uno solo con `{id_alumno, nombre, correo_institucional, boleta, activo, acceso_pendiente}`; 400 `q` ausente o de menos de 3 caracteres; 403 Profesor o Alumno |
 | GET | `/alumnos/:id` | Profesor (con materia compartida) | — | 200 `{alumno}`; 403 sin materia en común; 404 |
-| GET | `/alumnos/:id/actividades` | Profesor (con materia compartida) | — | 200 `{alumno, actividades}` (incluye equipo y calificación por actividad); 403; 404 |
+| GET | `/alumnos/:id/actividades` | Profesor (con materia compartida) | — | 200 `{alumno, actividades}` (solo las actividades de las materias del profesor dirigidas al alumno, con su equipo activo y su calificación; ver «Actividades dirigidas al alumno»); 403; 404 |
 | POST | `/alumnos` | Profesor | `{boleta, nombre, apellido_paterno, apellido_materno?, correo, grupo, carrera?, materia}` (`materia` = clave; opcionales `semestre`, `id_materia`) | 201 `{alumno, credenciales}`; 400 datos inválidos; 404 materia no propia; 409 boleta/correo en conflicto |
 | POST | `/alumnos/importar` | Profesor | multipart: `archivo` (.xlsx/.xls, multer memoria, `MAX_FILE_SIZE_MB`, 1 archivo), `materia` (clave) | 200 `{resultado: {total, insertados, inscritos, ya_inscritos, errores: [{fila, errores}]}, credenciales}`; 400 archivo inválido/falta materia; 404 materia no propia |
 | PUT | `/alumnos/:id` | Profesor con el alumno inscrito (inscripción vigente) en una materia suya no cerrada | `{boleta (10 dígitos), nombre, apellido_paterno, apellido_materno?, grupo, carrera?}` — **el correo institucional no se edita**: enviar `correo` o `correo_institucional` responde 400 | 200 `{alumno}`; 400; 403; 404; 409 boleta duplicada |
@@ -185,11 +185,11 @@ Escritura: solo Profesor.
 
 | Método | Ruta | Rol | Body / params | Respuestas |
 |---|---|---|---|---|
-| GET | `/equipos?materia=<clave>` | Profesor / Alumno (ignora `materia`, siempre los suyos) | opcionales `&semestre=` / `&id_materia=` (Profesor) | 200 `{equipos, materia?}` (con integrantes; `materia` incluye `equipo_tamano_auto`, `equipo_min`, `equipo_max`) |
-| GET | `/equipos/:id` | Profesor dueño / Alumno integrante | — | 200 `{equipo}` (incluye `equipo_tamano_auto`, `equipo_min`, `equipo_max` de su materia); 403; 404 |
-| POST | `/equipos` | Profesor | `{id_materia, nombre, tipo: Practica|Tarea|Proyecto, integrantes: [ids únicos, entre equipo_min y equipo_max de la materia]}` | 201 `{equipo, equipo_espejo}` (`equipo_espejo` = `{id_equipo, tipo}` de la fila gemela, o `null` en Proyecto); 400 fuera del rango de la materia ("Un equipo de esta materia debe tener entre … y … integrantes"), vacío o más de 10 (Joi), repetidos o integrante no inscrito; 404 materia no propia; 409 integrante ya tiene un equipo activo de ese tipo en la materia (Práctica y Tarea cuentan como uno; Proyecto se valida aparte) |
-| POST | `/equipos/generar` | Profesor | `{id_materia, tipo}` | 201 `{equipos, equipos_creados, tamano_equipo, alumnos_sin_asignar, ids_alumnos_sin_asignar, sin_asignar: [{id_alumno, nombre}]}`; 404 materia no propia; 422 `{error, alumnos_disponibles, sin_asignar}` con menos alumnos disponibles que `equipo_tamano_auto` |
-| PUT | `/equipos/:id` | Profesor dueño | `{nombre, integrantes: [ids únicos, entre equipo_min y equipo_max de la materia]}` | 200 `{message, equipos_actualizados: [ids]}`; 400; 403; 404; 409 |
+| GET | `/equipos?materia=<clave>` | Profesor / Alumno (ignora `materia`, siempre los suyos) | opcionales `&semestre=` / `&id_materia=` (Profesor) | 200 `{equipos, materia?}` (con integrantes; `materia` incluye `equipo_tamano_auto`, `equipo_min`, `equipo_max`, `regla_repeticion`) |
+| GET | `/equipos/:id` | Profesor dueño / Alumno integrante | — | 200 `{equipo}` (incluye `equipo_tamano_auto`, `equipo_min`, `equipo_max`, `regla_repeticion` de su materia); 403; 404 |
+| POST | `/equipos` | Profesor | `{id_materia, nombre, tipo: Practica|Tarea|Proyecto, integrantes: [ids únicos, entre equipo_min y equipo_max de la materia]}` | 201 `{equipo, equipo_espejo}` (`equipo_espejo` = `{id_equipo, tipo}` de la fila gemela, o `null` en Proyecto); 400 fuera del rango de la materia ("Un equipo de esta materia debe tener entre … y … integrantes"), vacío o más de 10 (Joi), repetidos o integrante no inscrito; 404 materia no propia; 409 integrante ya ocupado según la regla de repetición de la materia (abajo) |
+| POST | `/equipos/generar` | Profesor | `{id_materia, tipo}` | 201 `{equipos, equipos_creados, tamano_equipo, alumnos_sin_asignar, ids_alumnos_sin_asignar, sin_asignar: [{id_alumno, nombre}]}`; 404 materia no propia; 422 `{error, alumnos_disponibles, sin_asignar}` con menos alumnos disponibles que `equipo_tamano_auto` (disponibles = inscritos que no están ocupados según la regla de repetición) |
+| PUT | `/equipos/:id` | Profesor dueño | `{nombre, integrantes: [ids únicos, entre equipo_min y equipo_max de la materia]}` | 200 `{message, equipos_actualizados: [ids]}`; 400; 403; 404; 409 integrante ya ocupado según la regla de repetición (el propio equipo y su espejo no cuentan) |
 | PATCH | `/equipos/:id/desactivar` | Profesor dueño | — | 200 `{message, equipos_desactivados: [ids]}`; 403; 404 |
 
 **Espejo Práctica/Tarea.** Un equipo de Práctica o de Tarea son dos filas de `equipo` (una por tipo, mismos
@@ -205,6 +205,28 @@ de integrantes sea inválido.
 `equipo` con los mismos integrantes en una sola pasada. `Proyecto` se reagrupa de forma
 independiente.
 
+**Regla de repetición** (`materia.regla_repeticion`). Solo cuentan los equipos activos de la misma
+materia; entre materias no hay restricción.
+
+- `B` (por defecto): un alumno no puede estar en dos equipos del mismo tipo; Práctica y Tarea cuentan
+  como uno. Sí puede estar a la vez en un equipo de Práctica/Tarea y en uno de Proyecto.
+- `A`: además, quien está en un equipo de Práctica/Tarea no puede estar en uno de Proyecto, y
+  viceversa. Práctica y Tarea siguen siendo el mismo equipo (espejo). `generar` deja fuera a los
+  alumnos ubicados en cualquiera de los dos bloques.
+
+Mensajes del 409 en `POST` y `PUT /equipos`:
+
+| Caso | Mensaje |
+|---|---|
+| Choque dentro del mismo bloque (las dos reglas) | "El alumno con id N ya tiene un equipo de tipo T en esta materia" (en `PUT`: "…ya tiene otro equipo…") |
+| Choque con el otro bloque (solo `A`) | "El alumno con id N ya está en un equipo de Práctica/Tarea; en esta materia no puede estar también en uno de Proyecto" (o al revés) |
+
+Mensajes del 422 de `generar` con la regla `A` (con `B` no cambian): "No hay alumnos disponibles:
+todos los alumnos inscritos ya tienen equipo de Práctica/Tarea o de Proyecto en esta materia, y su
+regla de repetición no permite estar en ambos" y "Solo hay N alumno(s) sin equipo de Práctica/Tarea
+ni de Proyecto en esta materia (su regla de repetición no permite estar en ambos); se necesitan al
+menos T para formar un equipo".
+
 ## actividades
 
 Pantallas 10, 15 (y la pantalla intermedia `/actividades` del sidebar de Profesor). Multer en
@@ -214,7 +236,7 @@ disco, `MAX_FILE_SIZE_MB`, hasta 10 archivos, extensión+MIME en lista blanca
 | Método | Ruta | Rol | Body / params | Respuestas |
 |---|---|---|---|---|
 | GET | `/actividades?materia=<clave>` | Profesor (las de su materia) / Alumno (las visibles para él, de materias con inscripción vigente) | opcionales `&semestre=` / `&id_materia=` (Profesor) | 200 `{actividades, materia?}` |
-| GET | `/actividades/:id` | Profesor dueño / Alumno con acceso | — | 200 `{actividad}`; 403; 404 (también si está programada y aún no visible) |
+| GET | `/actividades/:id` | Profesor dueño / Alumno con acceso | — | 200 `{actividad}`; 403 (alumno: actividad no dirigida a él, ver abajo); 404 (también si está programada y aún no visible) |
 | POST | `/actividades` | Profesor | multipart: `archivos[]` + `{id_materia, id_equipo?, todos_los_equipos, entrega_por_equipo, titulo, descripcion?, tipo: En clase|Practica|Tarea|Proyecto, tipo_evaluacion?, fecha_limite, programada, fecha_publicacion (requerida si programada)}` | 201 `{actividad}`; 400; 404 materia no propia; 422 sin equipos del tipo indicado |
 | PUT | `/actividades/:id` | Profesor dueño | `{titulo, descripcion?, tipo_evaluacion?, fecha_limite, programada, fecha_publicacion}` + opcionales `{tipo, entrega_por_equipo, todos_los_equipos, id_equipo}` (si se omiten se conservan) | 200 `{message}`; 400; 403; 404; 409 actividad desactivada; 409 `codigo: ACTIVIDAD_CON_ENTREGAS` si se intenta cambiar `tipo`, `entrega_por_equipo` o el destino y la actividad ya tiene entregas o calificaciones; 422 sin equipos del tipo |
 | PATCH | `/actividades/:id/desactivar` | Profesor dueño | — | 200 `{message}`; 403; 404 |
@@ -230,6 +252,21 @@ calificaciones registradas). Los archivos adjuntos no se modifican con `PUT`.
 fecha_publicacion <= NOW()` va en el `WHERE` SQL (`publicacion.service.js`), tanto en el listado
 como en `GET /:id` — nunca se filtra solo en el frontend, y el acceso directo a una actividad
 programada no visible responde 404 (no 403) para no confirmar su existencia.
+
+**Actividades dirigidas al alumno** (`condicionActividadDirigidaAlumnoSQL` en
+`destinoActividad.service.js`). Un alumno solo recibe una actividad si:
+
+- `todos_los_equipos = TRUE`: tiene un equipo **activo**, en esa materia, del tipo que corresponde a
+  la actividad (Proyecto → Proyecto, Práctica → Práctica, Tarea y En clase → Tarea);
+- `todos_los_equipos = FALSE`: el equipo destino (`id_equipo`) es uno **activo** suyo.
+
+La misma condición filtra `GET /actividades` del alumno, su `GET /dashboard`, los adjuntos
+(`GET /archivos/actividad/:id`) y `GET /alumnos/:id/actividades` (pantalla 09, del profesor), y es
+la que exige `entregas` para listar o entregar. `GET /actividades/:id` responde 403 "No tienes
+permiso para ver esta actividad" a un alumno inscrito al que no va dirigida. Antes de la sesión E2,
+las actividades para todos los equipos se mostraban a cualquier inscrito (aunque no tuviera equipo
+de ese tipo) y las de un equipo específico seguían visibles (y se podían entregar) después de
+desactivar el equipo; la pantalla 09 listaba todas las actividades de la materia.
 
 ## entregas
 

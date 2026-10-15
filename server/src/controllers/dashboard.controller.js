@@ -13,6 +13,7 @@
 
 const pool = require('../config/db')
 const { condicionVisibleAlumnoSQL } = require('../services/publicacion.service')
+const { condicionActividadDirigidaAlumnoSQL } = require('../services/destinoActividad.service')
 const { condicionAvisoVisibleAlumnoSQL } = require('../services/avisos.service')
 const { obtenerSemestreActivo } = require('../services/semestres.service')
 
@@ -155,9 +156,9 @@ async function obtenerParaAlumno(req, res) {
      LEFT JOIN calificacion cal ON cal.id_actividad = act.id_actividad AND cal.id_alumno = ?
      WHERE act.activo = TRUE
        AND ${condicionVisibleAlumnoSQL('act')}
-       AND (act.todos_los_equipos = TRUE OR act.id_equipo IN (SELECT id_equipo FROM equipo_alumno WHERE id_alumno = ?))
+       AND ${condicionActividadDirigidaAlumnoSQL('act')}
      ORDER BY act.fecha_limite, act.id_actividad`,
-    [idAlumno, idAlumno, idAlumno, idAlumno]
+    [idAlumno, idAlumno, idAlumno, idAlumno, idAlumno]
   )
 
   // Realizada = entregó (estatus distinto de 'Pendiente') o ya tiene calificación (las

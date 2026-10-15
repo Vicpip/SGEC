@@ -1,5 +1,6 @@
 // Algoritmo de asignación aleatoria de integrantes a equipos, sin repetición de alumnos
-// dentro de un mismo tipo de equipo (Práctica y Tarea cuentan como uno) en la misma materia.
+// dentro de un mismo tipo de equipo (Práctica y Tarea cuentan como uno) en la misma materia,
+// o entre bloques si la materia usa la regla 'A' (ver tiposExcluyentes).
 //
 // Los equipos 'Practica' y 'Tarea' comparten integrantes (ver CLAUDE.md — reglas críticas):
 // cada equipo de esos tipos existe como DOS filas de `equipo` (una por tipo, mismos
@@ -52,6 +53,24 @@ function tiposEspejo(tipo) {
   return TIPOS_ESPEJO.includes(tipo) ? TIPOS_ESPEJO : [tipo]
 }
 
+// Regla de repetición de la materia (materia.regla_repeticion, migración 008):
+//   'B' (por defecto): un alumno no repite dentro del mismo tipo; Práctica y Tarea cuentan como
+//       uno (tiposEspejo). Puede estar a la vez en un equipo de Práctica/Tarea y en uno de
+//       Proyecto.
+//   'A' (A′, entre bloques): además, quien está en un equipo de Práctica/Tarea no puede estar en
+//       uno de Proyecto, y viceversa. Práctica y Tarea siguen siendo el mismo equipo (espejo).
+// Devuelve los tipos de equipo activos que impiden colocar a un alumno en un equipo de `tipo`.
+const TODOS_LOS_TIPOS = ['Practica', 'Tarea', 'Proyecto']
+
+function tiposExcluyentes(tipo, regla) {
+  return regla === 'A' ? TODOS_LOS_TIPOS : tiposEspejo(tipo)
+}
+
+// Nombre del bloque al que pertenece un tipo, para los mensajes: 'Práctica/Tarea' o 'Proyecto'.
+function nombreBloque(tipo) {
+  return TIPOS_ESPEJO.includes(tipo) ? 'Práctica/Tarea' : 'Proyecto'
+}
+
 // Tipo de la fila gemela de un equipo ('Practica' <-> 'Tarea'); null si el tipo no tiene
 // espejo (Proyecto).
 function tipoEspejoDe(tipo) {
@@ -63,6 +82,8 @@ function tipoEspejoDe(tipo) {
 module.exports = {
   asignarEquiposAleatorio,
   tiposEspejo,
+  tiposExcluyentes,
+  nombreBloque,
   tipoEspejoDe,
   TAMANO_EQUIPO_AUTOMATICO,
   INTEGRANTES_MIN,

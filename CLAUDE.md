@@ -139,6 +139,8 @@ Servicios de negocio en `server/src/services/`:
 - `excel.service.js` — parseo y validación fila por fila de listas de alumnos (`.xlsx`).
 - `reporte.service.js` — reportes de desempeño en PDF y Excel.
 - `publicacion.service.js` — condición SQL de visibilidad de actividades programadas.
+- `destinoActividad.service.js` (rama `feature/equipos-configurables`) — `tipoEquipoParaActividad()`
+  y la condición SQL de "actividad dirigida al alumno" (solo sus equipos activos).
 - `materias.service.js` — única puerta para buscar una materia por clave, acotada a quien llama.
 - `avisos.service.js`, `semestres.service.js`, `usuarios.service.js` — consultas compartidas.
 - `email.service.js` — correo saliente por SMTP, opcional (`EMAIL_DRY_RUN=true` en pruebas).
@@ -169,7 +171,7 @@ Ver DDL completo en `server/db/schema.sql`.
 | `profesor` | Extiende `usuario`: no_empleado, departamento |
 | `alumno` | Extiende `usuario`: boleta, grupo, carrera (`carrera` es nullable) |
 | `semestre` | Período académico (ej. 2026/1) |
-| `materia` | Unidad de aprendizaje por semestre y profesor. Borrado lógico vía `estatus ENUM('Activa','En curso','Cerrada')` — no tiene campo `activo`. En la rama `feature/equipos-configurables` (migración 008) agrega la configuración de equipos: `equipo_tamano_auto` (3), `equipo_min` (3), `equipo_max` (4), `regla_repeticion ENUM('B','A')` ('B') y `usa_practica`/`usa_tarea`/`usa_proyecto` (TRUE); por ahora solo el tamaño tiene efecto |
+| `materia` | Unidad de aprendizaje por semestre y profesor. Borrado lógico vía `estatus ENUM('Activa','En curso','Cerrada')` — no tiene campo `activo`. En la rama `feature/equipos-configurables` (migración 008) agrega la configuración de equipos: `equipo_tamano_auto` (3), `equipo_min` (3), `equipo_max` (4), `regla_repeticion ENUM('B','A')` ('B') y `usa_practica`/`usa_tarea`/`usa_proyecto` (TRUE); tienen efecto el tamaño (E1) y la regla (E2); los `usa_*` solo se guardan |
 | `materia_alumno` | Inscripción alumno–materia. Baja lógica con `activo` (reinscribir reactiva la misma fila). Toda consulta de "está inscrito" exige `activo = TRUE` |
 | `equipo` | Grupo colaborativo por tipo (`Practica`, `Tarea`, `Proyecto`). `id_equipo_espejo INT NULL` (auto-FK) enlaza la fila de Práctica con su gemela de Tarea; NULL en Proyecto |
 | `equipo_alumno` | Integrantes del equipo |
@@ -194,15 +196,23 @@ Ver DDL completo en `server/db/schema.sql`.
   alumno sí puede tener equipo de Práctica/Tarea y de Proyecto a la vez, incluso con los mismos
   compañeros. El requerimiento 5 es ambiguo (A: no repetir entre tipos; B: no repetir dentro del
   mismo tipo); el sistema implementa B, ninguna es oficial y está pendiente de confirmar con el
-  asesor. Trabajo futuro propuesto: configuración por materia (`docs/LIMITACIONES.md` §7).
+  asesor. En la rama `feature/equipos-configurables` (E2) cada materia elige la regla en
+  `regla_repeticion`: `B` (por defecto, la de arriba) o `A` (A′: además, quien está en un equipo
+  activo de Práctica/Tarea no puede estar en uno de Proyecto, y viceversa; el espejo
+  Práctica/Tarea no cambia). `tiposExcluyentes()` la aplica en alta, edición y `generar`; solo se
+  cambia sin equipos activos (409). La A estricta (Práctica distinto de Tarea) es trabajo futuro
+  (`docs/LIMITACIONES.md` §7).
 - Los equipos `Practica` y `Tarea` **comparten los mismos integrantes**: cada equipo son dos filas
   de `equipo` enlazadas por `id_equipo_espejo`; crear, editar y desactivar opera siempre sobre
   ambas en una transacción (nunca emparejar por nombre). Las actividades `En clase` se asignan a
-  los equipos de `Tarea` (`tipoEquipoParaActividad()` en `actividades.controller.js`), es decir,
+  los equipos de `Tarea` (`tipoEquipoParaActividad()`; en la rama, en `destinoActividad.service.js`), es decir,
   a los mismos integrantes. Esta regla está pendiente de confirmar con el asesor
   (`docs/LIMITACIONES.md` §7).
 - Si `todos_los_equipos = TRUE`, la actividad va a todos los equipos del tipo correspondiente en
-  esa materia; si es `FALSE`, al equipo de `id_equipo`.
+  esa materia; si es `FALSE`, al equipo de `id_equipo`. En la rama `feature/equipos-configurables`
+  (E2), el alumno solo ve (listado, panel, adjuntos, detalle con 403) y entrega una actividad si va
+  a un equipo **activo** suyo (`condicionActividadDirigidaAlumnoSQL()`): sin equipo del tipo, o con
+  el equipo desactivado, no la ve. La pantalla 09 del profesor usa la misma condición.
 - Las calificaciones son **grupales por defecto**; el profesor puede ajustarlas individualmente
   (`individual = TRUE`).
 - `entrega_por_equipo = TRUE`: la entrega de un integrante crea la de todo el equipo con estatus
@@ -367,10 +377,12 @@ aplican todas las migraciones que falten, en orden numérico: `docs/DEPLOYMENT.m
 | Sesión | Tema | Estado | Commit |
 |--------|------|--------|--------|
 | E1 | Ajustes de materia (migración 008) y tamaño de equipo | ✅ Completa | 2e1123d |
+| E2 | Regla de repetición entre bloques (A′) y visibilidad del alumno | ✅ Completa | (pendiente) |
 
-Siguientes etapas (sesiones posteriores): aplicar `regla_repeticion` (Etapa 1b) y los tipos activos
-`usa_*` (Etapa 2); hoy solo se guardan.
+Siguientes etapas (sesiones posteriores): los tipos activos `usa_*` (Etapa 2; hoy solo se guardan)
+y el trabajo individual (Etapa 3).
 
-Bases temporales de E1 para borrado manual: `sgec_eq_tmp`, `sgec_eq_sep`, `sgec_eq_parcial`.
+Bases temporales para borrado manual: de E1, `sgec_eq_tmp`, `sgec_eq_sep`, `sgec_eq_parcial`; de
+E2, `sgec_e2_tmp` y `sgec_e2_old`.
 
 Limitaciones conocidas: `docs/LIMITACIONES.md` (15 puntos, con resumen al inicio).

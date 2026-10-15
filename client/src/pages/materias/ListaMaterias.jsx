@@ -15,16 +15,13 @@ import { useAuth } from '../../context/AuthContext'
 import * as materiasService from '../../services/materias.service'
 import * as semestresService from '../../services/semestres.service'
 import * as usuariosService from '../../services/usuarios.service'
+import { REGLAS_REPETICION } from '../../utils/reglaRepeticion'
 
 const VARIANT_POR_ESTATUS = { Activa: 'green', 'En curso': 'yellow', Cerrada: 'gray' }
 
 // Configuración de equipos de la materia (migración 008). Los valores por defecto
 // reproducen el comportamiento original: equipos automáticos de 3, manuales de 3 o 4.
 const TOPE_INTEGRANTES = 10
-const REGLAS_REPETICION = [
-  { valor: 'B', label: 'No repetir dentro del mismo tipo (Práctica y Tarea cuentan como uno)' },
-  { valor: 'A', label: 'No repetir entre bloques de equipos' },
-]
 const TIPOS_EQUIPO = [
   { campo: 'usa_practica', label: 'Práctica' },
   { campo: 'usa_tarea', label: 'Tarea' },
@@ -48,7 +45,7 @@ function MateriaForm({ inicial, semestres, profesores, esAdmin, onCancel, onSave
   const [tamanoAuto, setTamanoAuto] = useState(String(inicial?.equipo_tamano_auto ?? 3))
   const [minIntegrantes, setMinIntegrantes] = useState(String(inicial?.equipo_min ?? 3))
   const [maxIntegrantes, setMaxIntegrantes] = useState(String(inicial?.equipo_max ?? 4))
-  const reglaRepeticion = inicial?.regla_repeticion ?? 'B'
+  const [reglaRepeticion, setReglaRepeticion] = useState(inicial?.regla_repeticion ?? 'B')
   const tiposUsados = {
     usa_practica: Boolean(inicial?.usa_practica ?? true),
     usa_tarea: Boolean(inicial?.usa_tarea ?? true),
@@ -231,7 +228,8 @@ function MateriaForm({ inicial, semestres, profesores, esAdmin, onCancel, onSave
               <ChevronRight className={`icon-sm accordion-chevron${verAjustes ? ' expanded' : ''}`} />
               Configuración de equipos
               <span className="text-xs" style={{ fontWeight: 400 }}>
-                (equipos de {tamanoAuto}; de {minIntegrantes} a {maxIntegrantes} integrantes)
+                (equipos de {tamanoAuto}; de {minIntegrantes} a {maxIntegrantes} integrantes
+                {reglaRepeticion === 'A' ? '; sin repetir entre bloques' : ''})
               </span>
             </button>
 
@@ -243,8 +241,8 @@ function MateriaForm({ inicial, semestres, profesores, esAdmin, onCancel, onSave
                 </p>
                 {conEquipos && (
                   <p className="text-sm mb12" style={{ color: 'var(--yellow)' }}>
-                    Esta materia tiene equipos activos: desactívalos para cambiar el tamaño o el mínimo. El máximo
-                    solo se puede ampliar.
+                    Esta materia tiene equipos activos: desactívalos para cambiar el tamaño, el mínimo o la regla de
+                    repetición. El máximo solo se puede ampliar.
                   </p>
                 )}
                 <div className="form-row-3">
@@ -296,15 +294,26 @@ function MateriaForm({ inicial, semestres, profesores, esAdmin, onCancel, onSave
 
                 <div className="form-group">
                   <label className="form-label" htmlFor="regla_repeticion">
-                    Regla de repetición de alumnos <span className="text-xs">(próximamente)</span>
+                    Regla de repetición de alumnos
                   </label>
-                  <select id="regla_repeticion" className="form-control" value={reglaRepeticion} disabled>
+                  <select
+                    id="regla_repeticion"
+                    className="form-control"
+                    value={reglaRepeticion}
+                    disabled={conEquipos}
+                    onChange={(e) => setReglaRepeticion(e.target.value)}
+                  >
                     {REGLAS_REPETICION.map((r) => (
                       <option key={r.valor} value={r.valor}>
                         {r.label}
                       </option>
                     ))}
                   </select>
+                  <p className="text-xs" style={{ marginTop: 6 }}>
+                    En ambos casos Práctica y Tarea son el mismo equipo. Con la segunda opción, quien está en un equipo
+                    de Práctica/Tarea no puede estar en uno de Proyecto, y viceversa; las actividades de Proyecto solo
+                    las ven los alumnos con equipo de Proyecto.
+                  </p>
                 </div>
 
                 <div className="form-group" style={{ marginBottom: 0 }}>
