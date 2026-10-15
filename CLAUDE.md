@@ -377,7 +377,7 @@ aplican todas las migraciones que falten, en orden numérico: `docs/DEPLOYMENT.m
 | Sesión | Tema | Estado | Commit |
 |--------|------|--------|--------|
 | E1 | Ajustes de materia (migración 008) y tamaño de equipo | ✅ Completa | 2e1123d |
-| E2 | Regla de repetición entre bloques (A′) y visibilidad del alumno | ✅ Completa | (pendiente) |
+| E2 | Regla de repetición entre bloques (A′) y visibilidad del alumno | ✅ Completa | 7313d82 |
 
 Siguientes etapas (sesiones posteriores): los tipos activos `usa_*` (Etapa 2; hoy solo se guardan)
 y el trabajo individual (Etapa 3).
