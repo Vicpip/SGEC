@@ -57,9 +57,9 @@ El sistema permite:
 
 | Rol | Descripción |
 |---|---|
-| **Administrador** | Gestiona profesores, semestres y materias a nivel institucional. Acceso total al sistema. |
+| **Administrador** | Gestiona profesores, semestres y materias a nivel institucional, y restablece el acceso de los alumnos. No opera las pantallas del profesor (equipos, actividades, calificaciones). |
 | **Profesor** | Crea materias, forma equipos, publica actividades, registra calificaciones y genera reportes. |
-| **Alumno** | Consulta sus equipos, actividades y calificaciones. Puede entregar actividades. Vista de solo lectura en reportes. |
+| **Alumno** | Consulta sus equipos, actividades, calificaciones y el tablón de avisos. Puede entregar actividades. No tiene acceso a reportes. |
 
 ---
 
@@ -67,12 +67,12 @@ El sistema permite:
 
 | Capa | Tecnología |
 |---|---|
-| Frontend | React + Vite |
-| Backend | Node.js + Express |
-| Base de datos | MySQL |
+| Frontend | React 18 + Vite 5, react-router-dom 7 |
+| Backend | Node.js 20 + Express 4 |
+| Base de datos | MySQL 8 |
 | Autenticación | JWT + bcrypt |
 | Importación Excel | `xlsx` (SheetJS) |
-| Exportación PDF | `pdfkit` o similar |
+| Exportación de reportes | `pdfkit` (PDF) y `xlsx` (Excel) |
 
 ---
 
@@ -99,8 +99,8 @@ sgec/
 │   │   │   ├── tablon/             # Tablón de avisos (profesor y alumno)
 │   │   │   ├── admin/              # Gestión de profesores (Admin)
 │   │   │   └── perfil/             # Perfil y configuración de cuenta
-│   │   ├── hooks/                  # Custom hooks (useAuth, useFetch, etc.)
-│   │   ├── context/                # AuthContext, SemestreContext
+│   │   ├── hooks/                  # Custom hooks (useAuth, useSelectorMateria)
+│   │   ├── context/                # AuthContext
 │   │   ├── services/               # Llamadas a la API REST
 │   │   ├── utils/                  # Helpers (formatDate, calcPromedios, etc.)
 │   │   ├── router/                 # React Router, rutas protegidas por rol
@@ -203,7 +203,7 @@ cp .env.example .env
 
 # En client/
 cp .env.example .env
-# Editar client/.env con la URL del backend
+# client/.env: VITE_API_URL=http://localhost:3001/api (o /api, que pasa por el proxy de Vite)
 ```
 
 ### 4. Crear la base de datos y correr el schema
@@ -216,11 +216,12 @@ mysql -u root -p sgec < server/db/schema.sql
 ### 5. (Opcional) Cargar datos de prueba
 
 ```bash
-mysql -u root -p sgec < server/db/seeds/01_semestres.sql
-mysql -u root -p sgec < server/db/seeds/02_usuarios.sql
-mysql -u root -p sgec < server/db/seeds/03_materias.sql
-mysql -u root -p sgec < server/db/seeds/04_equipos.sql
+node server/db/seeds/run_seeds.js   # carga los 12 archivos de server/db/seeds/ en orden
 ```
+
+Los seeds traen cuentas con contraseñas publicadas en el repositorio: son solo para desarrollo y
+demostración. En producción la base arranca vacía y el Administrador se crea con
+`server/db/create_admin.js` (ver `DEPLOY.md`).
 
 ### 6. Levantar en desarrollo
 
@@ -321,18 +322,24 @@ El schema completo se encuentra en `server/db/schema.sql`.
 | 18 | Tablón de Avisos | Profesor | `/tablon` |
 | 19 | Tablón de Avisos | Alumno | `/alumno/tablon` |
 
+Además de las 19 pantallas, el sistema tiene rutas auxiliares: `/recuperar-password` y
+`/restablecer-password` (recuperación de contraseña), `/admin/semestres` y `/admin/accesos`
+(Administrador), `/actividades` y `/actividades/:id/editar` (Profesor), y `/alumno/equipos`,
+`/alumno/actividades` y `/alumno/calificaciones` (Alumno). La lista completa con su rol está en
+`CLAUDE.md`. El Administrador entra a `/admin/profesores`.
+
 ---
 
 ## Reglas de negocio
 
-- Cada equipo tiene exactamente **3 integrantes**.
+- La asignación automática forma equipos de exactamente **3 integrantes** y reporta a los 1–2 alumnos que sobran; el alta y la edición manual admiten **3 o 4** (para absorber a los sobrantes).
 - Un alumno **no puede repetir** equipo por tipo (Práctica, Tarea, Proyecto) dentro de la misma materia.
-- Los equipos `En clase` y `Tarea` **comparten los mismos integrantes**; la diferencia es solo lógica al asignar actividades.
+- Los equipos de `Práctica` y de `Tarea` **comparten los mismos integrantes** (cada equipo existe como dos filas enlazadas, que se crean, editan y desactivan juntas); `Proyecto` se forma aparte. Las actividades de tipo `En clase` se asignan a esos mismos equipos de Práctica/Tarea: `En clase` es un tipo de **actividad**, no de equipo.
 - Las calificaciones son **grupales por defecto**; el profesor puede ajustarlas individualmente (flag `individual = TRUE` en `calificacion`).
 - Las actividades con `programada = TRUE` son invisibles al alumno hasta que se alcanza `fecha_publicacion`.
 - Un aviso con `id_materia = NULL` se dirige a **todos los alumnos de todas las materias activas** del profesor.
-- El borrado es **lógico** (campo `activo`): los registros se desactivan, no se eliminan, para conservar el historial de semestres anteriores.
-- El acceso requiere **correo institucional** válido (`@escom.ipn.mx` o `@alumno.ipn.mx`).
+- El borrado es **lógico** (campo `activo`; en `materia`, `estatus = 'Cerrada'`): los registros se desactivan, no se eliminan, para conservar el historial de semestres anteriores.
+- El acceso requiere **correo institucional** válido: `@alumno.ipn.mx` para alumnos; `@ipn.mx` o `@escom.ipn.mx` para profesores y administradores (`ALLOWED_EMAIL_DOMAINS`).
 
 ---
 

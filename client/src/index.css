@@ -172,12 +172,12 @@ body {
 /* ── Badges (tipo de equipo / estatus) ── */
 .badge { display: inline-flex; align-items: center; padding: 3px 10px; border-radius: var(--r-badge); font-size: 11px; font-weight: 600; white-space: nowrap; }
 .badge-blue { background: var(--blue-light); color: var(--blue); }     /* Practica */
-.badge-orange { background: #FFF7ED; color: var(--orange); }          /* Tarea */
-.badge-green { background: #F0FDF4; color: var(--green); }            /* Proyecto / Calificada */
+.badge-orange { background: #FFF7ED; color: var(--orange); }          /* Proyecto */
+.badge-green { background: #F0FDF4; color: var(--green); }            /* Calificada */
 .badge-yellow { background: #FFFBEB; color: var(--yellow); }          /* En revisión */
 .badge-red { background: #FEF2F2; color: var(--red); }                /* Pendiente */
-.badge-navy { background: #E8EDF5; color: var(--navy); }
-.badge-gray { background: var(--gray-100); color: var(--gray-400); }
+.badge-navy { background: #E8EDF5; color: var(--navy); }              /* Tarea */
+.badge-gray { background: var(--gray-100); color: var(--gray-400); }   /* En clase (actividad) */
 .badge-unread { background: var(--blue); color: white; }
 
 /* ── Tables ── */

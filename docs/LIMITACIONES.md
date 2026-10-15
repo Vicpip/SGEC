@@ -1,8 +1,29 @@
 # Limitaciones conocidas — SGEC
 
-Documento iniciado en la Sesión 14 del plan de cierre (`PLAN-CIERRE.md`) y actualizado en las
-Sesiones 15 y 16. La Sesión 17 lo completa con el resto de las limitaciones declaradas del
-sistema; aquí están las que se confirmaron con pruebas durante esas sesiones.
+Documento iniciado en la Sesión 14 del plan de cierre (`PLAN-CIERRE.md`), actualizado en las
+Sesiones 15 y 16 y completado en la Sesión 17 (14 de octubre de 2026). Cada punto se contrastó
+con el código de esa fecha. Las secciones 1 a 6 vienen de pruebas reales de esas sesiones; de la
+7 en adelante se indica en cada una cómo se comprobó.
+
+Resumen:
+
+| # | Limitación | Tipo |
+|---|---|---|
+| 1 | Una clave de materia reutilizada en otro semestre tapa a la anterior | Funcional (decisión 6) |
+| 2 | Accesos de alumnos: buscador acotado y contraseñas temporales sin caducidad | Funcional / seguridad |
+| 3 | Los adjuntos de una actividad no se editan después de publicarla | Funcional |
+| 4 | Equipos de Práctica/Tarea anteriores a la Sesión 15 sin espejo | Datos heredados |
+| 5 | Dar de baja a un alumno que está en un equipo exige rehacer el equipo | Funcional |
+| 6 | Reporte: sobrantes, porcentaje sin tardías y promedio solo de lo calificado | Funcional (decisión 5) |
+| 7 | Regla de integrantes pendiente de confirmar con el asesor | Requerimiento (decisión 1) |
+| 8 | Arquitectura de equipos fija y sin validación de grupos en el Excel | Trabajo futuro (decisión 7) |
+| 9 | Sin pruebas automatizadas | Calidad |
+| 10 | Cliente sin configuración de ESLint | Calidad |
+| 11 | `xlsx` (SheetJS) con CVEs sin corrección en npm | Seguridad (aceptado) |
+| 12 | Bundle del frontend sin code-splitting | Rendimiento |
+| 13 | Dependencias instaladas sin uso | Mantenimiento |
+| 14 | Límites de peticiones en memoria de un solo proceso | Operación |
+| 15 | Correo saliente nunca probado contra un servidor SMTP real | Operación |
 
 ## 1. Una clave de materia reutilizada en otro semestre tapa a la anterior
 
@@ -44,14 +65,22 @@ agregar el grupo al final (`BD-2026-2-4CM1`).
 profesores) ve las actividades y avisos de ambas; cada fila indica su grupo. Ninguna pantalla del
 alumno resuelve una materia por clave.
 
-## 2. Restablecer el acceso de un alumno que ya activó su cuenta (resuelta en la Sesión 15)
+## 2. Accesos de alumnos: buscador acotado y contraseñas temporales sin caducidad
 
 El Administrador ya tiene la pantalla **Accesos de alumnos** (`/admin/accesos`): busca por correo
 institucional o boleta y restablece el acceso con una contraseña temporal. Lo que sigue siendo una
 limitación: el buscador devuelve como máximo 10 resultados y exige al menos 3 caracteres (no es un
-listado de alumnos), y la contraseña temporal no caduca hasta que el alumno la cambie.
+listado de alumnos).
 
-## 3. Editar una actividad no permite cambiar sus archivos adjuntos
+**Las contraseñas temporales no caducan.** La que se genera en el alta manual, la importación o
+"Restablecer acceso" sirve hasta que el alumno la cambia: no hay fecha de vencimiento (en
+`usuario` solo existe el indicador `debe_cambiar_contrasena`; el login no compara fechas). Mientras
+no la cambie, esa cuenta solo puede usar `/api/auth/*` y Perfil, pero quien tenga la contraseña
+temporal puede activarla. Mitigación: entregar la contraseña en persona, pedir que se cambie el
+mismo día y, si se filtró, restablecer el acceso de nuevo (la anterior deja de servir y sus
+sesiones se cierran). Comprobado leyendo `auth.controller.js` y `schema.sql`.
+
+## 3. Los adjuntos de una actividad no se editan después de publicarla
 
 `PUT /api/actividades/:id` no recibe archivos. En el formulario de edición los documentos de
 referencia se muestran en solo lectura. Para cambiarlos hay que desactivar la actividad y
@@ -92,3 +121,80 @@ equipo de 4 puede quedarse en 3 sin sustituir a nadie.
   calificaciones recibidas entre actividades publicadas × integrantes). No distingue entregas
   tardías de entregas a tiempo.
 - El promedio del reporte solo considera las actividades calificadas (decisión 5 del plan).
+
+## 7. Regla de integrantes pendiente de confirmar (decisión 1)
+
+El sistema implementa: los equipos de Práctica y de Tarea comparten integrantes (cada equipo son
+dos filas enlazadas por `id_equipo_espejo`), Proyecto se forma aparte, y las actividades En clase
+van a los equipos de Práctica/Tarea. El requerimiento 5 original puede leerse de otra forma (por
+ejemplo, que cada tipo tenga equipos independientes). La decisión 1 del plan de cierre conservó el
+diseño actual y solo corrigió su consistencia técnica; **queda pendiente confirmarlo con el
+asesor**. Si exigiera otra regla, el cambio no es menor: toca la asignación, el alta manual, la
+migración 004 y el reporte.
+
+## 8. Arquitectura de equipos fija y sin validación de grupos en el Excel (decisión 7)
+
+Fuera del alcance del cierre, documentado como trabajo futuro:
+
+- **Tipos de equipo fijos.** Los tipos (`Practica`, `Tarea`, `Proyecto`) son un `ENUM` del
+  esquema, igual para todas las materias; qué tipos comparten integrantes está fijo en el código
+  (`tiposEspejo()` en `asignacion.service.js`); el tamaño es 3 en la asignación automática y 3 o 4
+  en la manual. Una versión configurable por materia (tipos, cuáles comparten integrantes, tamaño
+  de 1 a N) exige rediseñar el modelo de datos.
+- **El grupo del Excel no se valida contra la materia.** `excel.service.js` exige que la columna
+  `grupo` venga llena, pero no comprueba que coincida con el grupo de la materia a la que se
+  importa: un alumno de 4CM2 puede quedar inscrito en una materia de 4CM1 si así viene en el
+  archivo. Comprobado leyendo `excel.service.js`.
+
+## 9. Sin pruebas automatizadas
+
+No hay pruebas unitarias, de integración ni de extremo a extremo: ningún `package.json` tiene un
+script `test` y no hay archivos de prueba en el repositorio (comprobado con `git ls-files`). La
+verificación de cada sesión se hizo con peticiones HTTP reales contra bases temporales (sus
+resúmenes están en `docs/cierre/`) y la de la interfaz queda a cargo de personas con
+`docs/PRUEBAS-MANUALES.md`. Cualquier cambio futuro debe volver a probarse a mano.
+
+## 10. Cliente sin configuración de ESLint
+
+`client/package.json` declara el script `lint` y las dependencias de ESLint 8, pero no existe un
+archivo de configuración: `npm run lint` termina con "ESLint couldn't find a configuration file"
+(comprobado en la Sesión 17). El servidor no tiene linter. No se agregó una configuración al
+cierre porque mostraría avisos que nadie alcanzaría a revisar.
+
+## 11. `xlsx` (SheetJS) con CVEs sin corrección en npm
+
+`npm audit` reporta `xlsx` con severidad alta (contaminación de prototipos y ReDoS) en servidor y
+cliente; npm no publica una versión corregida. Aceptado: en el servidor solo procesa archivos que
+sube un Profesor autenticado, con límite de tamaño y filtro de tipo; en el cliente solo genera la
+plantilla de importación (no lee archivos). La salida es migrar al paquete oficial que SheetJS
+distribuye fuera de npm (cdn.sheetjs.com). Detalle y cifras: `docs/SECURITY.md`, "Sesión 17 —
+estado final de `npm audit`".
+
+## 12. Bundle del frontend sin code-splitting
+
+`vite build` produce un único archivo JavaScript de unos 750 KB (sin comprimir) con todas las
+pantallas de los tres roles, y Vite avisa que supera los 500 KB (comprobado en la Sesión 17). El
+primer acceso descarga todo aunque el usuario solo use su rol. Con Nginx sirviéndolo comprimido y
+en caché el efecto es tolerable; la mejora sería cargar las páginas con `React.lazy` por ruta.
+
+## 13. Dependencias instaladas sin uso
+
+`@tanstack/react-query` (solo se monta su `QueryClientProvider` en `main.jsx`; ninguna pantalla
+usa `useQuery`) y `recharts` (ninguna importación) siguen en `client/package.json`. No afectan el
+funcionamiento; se dejaron para no tocar dependencias al cierre.
+
+## 14. Límites de peticiones en memoria de un solo proceso
+
+Los limitadores (`utils/limitePeticiones.js`) usan el almacén en memoria por defecto de
+`express-rate-limit`: los contadores se pierden al reiniciar el contenedor `server` y no se
+comparten si algún día hubiera más de una instancia. Con una sola instancia, que es el despliegue
+actual, es suficiente. Los valores (5 fallos de inicio de sesión por IP + correo, 50 por IP, 600
+peticiones por usuario en 15 minutos) se eligieron sin datos reales de uso; si un grupo grande los
+alcanza, se ajustan en ese archivo.
+
+## 15. Correo saliente nunca probado contra un servidor SMTP real
+
+El envío por SMTP (nodemailer) está implementado y es opcional. Se probó sin `SMTP_HOST`, con
+`EMAIL_DRY_RUN=true` y con un host inválido (el flujo no se rompe ni se cuelga), pero nunca contra
+un buzón real: las credenciales se configuran después en el servidor. Hasta entonces, el acceso
+de los alumnos depende de la contraseña temporal que entrega el profesor.

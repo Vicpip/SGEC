@@ -15,7 +15,7 @@ de reportes de desempeño. Tres roles: Administrador, Profesor, Alumno.
 
 | Capa | Tecnología |
 |---|---|
-| Frontend | React 18 + Vite 5, react-router-dom 6, @tanstack/react-query 5, axios, lucide-react, recharts |
+| Frontend | React 18 + Vite 5, react-router-dom 7, axios, lucide-react. `@tanstack/react-query` y `recharts` están instalados pero no se usan (solo el `QueryClientProvider` de `main.jsx`); se dejaron para no tocar dependencias al cierre |
 | Backend | Node.js 20+ · Express 4 |
 | Base de datos | MySQL 8 (mysql2/promise, pool de conexiones) |
 | Autenticación | JWT (jsonwebtoken) + bcryptjs, validación de body con Joi |
@@ -75,8 +75,11 @@ Servicios de negocio en `server/src/services/`:
   no envía nada y ningún flujo se rompe. Envía el enlace de recuperación de contraseña y el
   correo de bienvenida con enlace de activación; nunca registra cuerpos, enlaces ni tokens
   (`EMAIL_DRY_RUN=true` solo registra destinatario y asunto).
+- **avisos.service.js** — regla de visibilidad de un aviso para un Alumno, compartida por el
+  Tablón y el Panel del Alumno para que ambos cuenten los mismos avisos.
+- **semestres.service.js** — consultas compartidas de semestres (semestre activo).
 
-Piezas transversales agregadas en la Sesión 16:
+Piezas transversales agregadas en las Sesiones 16 y 17:
 
 - **config/zonaHoraria.js** — fija la zona del proceso (`America/Mexico_City`) y expone el
   desfase `-06:00` que `config/db.js` aplica a cada conexión de MySQL. Todas las fechas del

@@ -9,6 +9,10 @@ agregaron features nuevas — solo fixes de seguridad, hardening y una decisión
 Un apartado por punto del checklist de `CLAUDE.md` (Sesión 12), con lo que realmente se
 encontró, el fix aplicado (si lo hubo) y la decisión final.
 
+> **Estado vigente.** Este documento conserva la auditoría de la Sesión 12 tal como se hizo y
+> agrega al final lo de las sesiones 13 a 17. Para `npm audit`, la cifra vigente es la de
+> "Sesión 17 — estado final de `npm audit`" (al final); la §5 es histórica.
+
 ## 1. Repetir el checklist de seguridad de la auditoría inicial
 
 Repasado contra el código real (no contra lo que decían las sesiones anteriores que habían
@@ -109,6 +113,8 @@ Verificado por inspección y en vivo (servidor local en `NODE_ENV=development`):
 **Decisión:** sin cambios — el gating es correcto tal como está.
 
 ## 5. npm audit — server y client
+
+*(Histórico, 17 de septiembre de 2026. El estado vigente está al final del documento.)*
 
 ### server
 
@@ -454,3 +460,29 @@ Hallazgos que quedan, con la decisión tomada:
 | `xlsx` (SheetJS) | servidor y cliente | Alta (contaminación de prototipos, ReDoS) | **Aceptado.** No hay versión corregida en npm. En el servidor solo procesa archivos que sube un Profesor autenticado, limitados por tamaño y tipo. La alternativa es el paquete oficial distribuido fuera de npm (cdn.sheetjs.com); queda como trabajo futuro |
 | `nodemon` → `chokidar` → `braces` | servidor, solo desarrollo | Alta (agotamiento de pila) | **Aceptado.** Es una dependencia de desarrollo: la imagen de producción instala con `npm ci --omit=dev` y no la incluye. La corrección que ofrece npm es bajar a `nodemon@1.14.10`, un cambio incompatible |
 | `vite` / `esbuild` | cliente, solo desarrollo | Alta / moderada | **Aceptado.** Afectan al servidor de desarrollo de Vite, que no se usa en producción (se sirve el build estático con Nginx). La corrección exige saltar a Vite 8, un cambio incompatible que no se hace a tres días de la entrega |
+
+## Sesión 17 — estado final de `npm audit` (14 de octubre de 2026)
+
+Ejecutado de nuevo en la Sesión 17 (`npm audit`, sin `fix`): las cifras coinciden con las que
+dejó la Sesión 16; no apareció nada nuevo.
+
+| Proyecto | Total | Por severidad | Paquetes |
+|---|---|---|---|
+| `server/` | 4 | 4 altas | `xlsx` (directa, sin corrección publicada); `nodemon` → `chokidar` → `braces` (desarrollo; la corrección de npm es bajar a `nodemon@1.14.10`, incompatible) |
+| `client/` | 3 | 2 altas, 1 moderada | `xlsx` (directa, sin corrección); `vite` (alta) y `esbuild` (moderada), ambas de desarrollo; la corrección exige Vite 8, incompatible |
+
+Decisión sobre cada hallazgo (sin cambios respecto de la Sesión 16):
+
+- **`xlsx` en el servidor — aceptado.** Solo procesa archivos `.xlsx` que sube un Profesor
+  autenticado, con límite de tamaño y filtro de tipo (`multer`). No hay versión corregida en
+  npm; migrar al paquete oficial de cdn.sheetjs.com queda como trabajo futuro
+  (`docs/LIMITACIONES.md`).
+- **`xlsx` en el cliente — aceptado.** Solo se usa en `ListaAlumnos.jsx` para **generar** la
+  plantilla de importación (`aoa_to_sheet` y `writeFile`); el navegador nunca abre un archivo
+  ajeno con esa librería, que es lo que explotan los CVEs (contaminación de prototipos y ReDoS al
+  leer).
+- **`nodemon` / `chokidar` / `braces` — aceptado.** Dependencias de desarrollo; la imagen de
+  producción instala con `npm ci --omit=dev`.
+- **`vite` / `esbuild` — aceptado.** Afectan al servidor de desarrollo de Vite; en producción se
+  sirve el build estático con Nginx.
+
