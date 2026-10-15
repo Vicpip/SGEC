@@ -1,6 +1,7 @@
 # SGEC — Referencia de API
 
-Base URL: `http://localhost:3001/api` en desarrollo (Vite hace proxy de `/api`). Todas las rutas
+Base URL: `http://localhost:3001/api` en desarrollo (Vite hace proxy de `/api`); en producción,
+la ruta relativa `/api` del mismo dominio (el Nginx del host la reparte al contenedor `server`). Todas las rutas
 salvo las explícitamente públicas requieren `Authorization: Bearer <token>`. El rol siempre se
 lee del JWT verificado (`req.user.rol`), nunca de un parámetro del cliente.
 
@@ -97,12 +98,13 @@ cualquiera.
 |---|---|---|---|---|
 | GET | `/materias` | Profesor (las suyas) / Administrador (todas) | `?semestre=<clave>` | 200 `{materias}` (incluye `total_alumnos`, `total_equipos`) |
 | GET | `/materias/:id` | Profesor dueño / Administrador | — | 200 `{materia}`; 403; 404 |
-| POST | `/materias` | Profesor, Administrador | `{clave, nombre, grupo, id_semestre, id_profesor (requerido solo si lo crea un Administrador)}` | 201 `{materia}`; 400 semestre/profesor inexistente; 409 si ese profesor ya tiene una materia con esa clave en el semestre (aunque el grupo sea otro), o si otro profesor ya usa esa clave + grupo + semestre; 422 el semestre está inactivo |
+| POST | `/materias` | Profesor, Administrador | `{clave, nombre, grupo, id_semestre, id_profesor (requerido solo si lo crea un Administrador)}` | 201 `{materia}`; 400 semestre/profesor inexistente; 409 si ese profesor ya tiene una materia con esa clave en el semestre (aunque el grupo sea otro), o si ya existe una materia (de otro profesor) con esa clave + grupo + semestre: el controlador lo comprueba antes de insertar y el índice único `uk_materia_clave_grupo_semestre` lo respalda (mismo 409, "Ya existe una materia con la clave "…" y grupo "…" en este semestre"); 422 el semestre está inactivo ("El semestre … está inactivo: no se pueden crear materias en él") |
 | PUT | `/materias/:id` | Profesor dueño / Administrador | `{clave, nombre, grupo, id_semestre, estatus, id_profesor?}` | 200 `{message}`; 403; 404; 409 (mismas dos reglas que el alta); 422 si se intenta mover la materia a un semestre inactivo (editar una que ya está en él sí se permite) |
 | PATCH | `/materias/:id/desactivar` | Profesor dueño / Administrador | — | 200 `{message}` (`estatus = 'Cerrada'`); 403; 404 |
 
 **Clave de materia.** La clave no es única en el sistema: profesores distintos pueden usar la
-misma en un semestre, y una clave puede reutilizarse en otro semestre. Lo que no se permite es
+misma en un semestre siempre que el grupo sea distinto (clave + grupo + semestre sí es única), y
+una clave puede reutilizarse en otro semestre. Lo que no se permite es
 que un mismo profesor tenga dos materias con la misma clave en el mismo semestre (409: "Ya tienes
 una materia con esa clave en este semestre; usa una clave distinta para el otro grupo (por
 ejemplo, agregando el grupo al final)").
@@ -166,7 +168,7 @@ Escritura: solo Profesor.
 |---|---|---|---|---|
 | GET | `/equipos?materia=<clave>` | Profesor / Alumno (ignora `materia`, siempre los suyos) | opcionales `&semestre=` / `&id_materia=` (Profesor) | 200 `{equipos, materia?}` (con integrantes) |
 | GET | `/equipos/:id` | Profesor dueño / Alumno integrante | — | 200 `{equipo}`; 403; 404 |
-| POST | `/equipos` | Profesor | `{id_materia, nombre, tipo: Practica|Tarea|Proyecto, integrantes: [3 o 4 ids únicos]}` | 201 `{equipo, equipo_espejo}` (`equipo_espejo` = `{id_equipo, tipo}` de la fila gemela, o `null` en Proyecto); 400 menos de 3, más de 4, repetidos o integrante no inscrito; 404 materia no propia; 409 integrante ya tiene equipo de ese tipo |
+| POST | `/equipos` | Profesor | `{id_materia, nombre, tipo: Practica|Tarea|Proyecto, integrantes: [3 o 4 ids únicos]}` | 201 `{equipo, equipo_espejo}` (`equipo_espejo` = `{id_equipo, tipo}` de la fila gemela, o `null` en Proyecto); 400 menos de 3, más de 4, repetidos o integrante no inscrito; 404 materia no propia; 409 integrante ya tiene un equipo activo de ese tipo en la materia (Práctica y Tarea cuentan como uno; Proyecto se valida aparte) |
 | POST | `/equipos/generar` | Profesor | `{id_materia, tipo}` | 201 `{equipos, equipos_creados, alumnos_sin_asignar, ids_alumnos_sin_asignar, sin_asignar: [{id_alumno, nombre}]}`; 404 materia no propia; 422 `{error, alumnos_disponibles, sin_asignar}` con menos de 3 alumnos disponibles |
 | PUT | `/equipos/:id` | Profesor dueño | `{nombre, integrantes: [3 o 4 ids únicos]}` | 200 `{message, equipos_actualizados: [ids]}`; 400; 403; 404; 409 |
 | PATCH | `/equipos/:id/desactivar` | Profesor dueño | — | 200 `{message, equipos_desactivados: [ids]}`; 403; 404 |
@@ -333,3 +335,15 @@ Cabeceras de la respuesta: `X-Content-Type-Options: nosniff`, `Cache-Control: pr
 `Content-Type: application/octet-stream`) para todo lo demás. Como el token viaja en el header
 `Authorization`, el frontend descarga con axios en modo `blob` (`ArchivoLink.jsx`), no con un
 `<a href>` directo.
+
+## health
+
+Comprobación de que el proceso del servidor responde. Definida directamente en `app.js`, sin
+router propio.
+
+| Método | Ruta | Rol | Body / params | Respuestas |
+|---|---|---|---|---|
+| GET | `/health` | Público | — | 200 `{"status":"ok"}` |
+
+No consulta la base de datos: un 200 indica que Express está arriba, no que MySQL responda. Se
+monta después del límite general de `/api`, así que cuenta en él (por IP, al no llevar token).

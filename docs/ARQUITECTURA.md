@@ -62,7 +62,8 @@ sgec/
 Servicios de negocio en `server/src/services/`:
 
 - **asignacion.service.js** — algoritmo de asignación aleatoria de integrantes a equipos de 3,
-  sin repetir compañeros por tipo de equipo dentro de la misma materia.
+  entre los alumnos que aún no tienen equipo activo de ese tipo en la materia (Práctica y Tarea
+  cuentan como uno).
 - **excel.service.js** — parseo y validación fila por fila de listas de alumnos (`.xlsx`).
 - **reporte.service.js** — genera el buffer del reporte de desempeño en PDF (pdfkit) y Excel (xlsx).
 - **publicacion.service.js** — determina si una actividad programada ya es visible al alumno
@@ -134,7 +135,7 @@ usuario (1) ── (1) profesor ── (N) materia ── (N) equipo ── (N) 
 | `semestre` | Período académico |
 | `materia` | Unidad de aprendizaje por semestre y profesor; borrado lógico vía `estatus` |
 | `materia_alumno` | Inscripción alumno–materia. Baja lógica con `activo` (Sesión 14): reinscribir reactiva la misma fila |
-| `equipo` / `equipo_alumno` | Equipo de 3 integrantes por tipo (Practica/Tarea/Proyecto) y sus miembros |
+| `equipo` / `equipo_alumno` | Equipo de 3 (o 4 en alta manual) integrantes por tipo (Practica/Tarea/Proyecto) y sus miembros |
 | `actividad` | En clase/Practica/Tarea/Proyecto; dirigida a un equipo o a todos los de un tipo |
 | `archivo_actividad` | Adjuntos del profesor a la actividad |
 | `entrega` / `archivo_entrega` | Entrega del alumno y sus adjuntos |
@@ -146,17 +147,20 @@ usuario (1) ── (1) profesor ── (N) materia ── (N) equipo ── (N) 
 - **Equipos de 3 (o 4 en alta manual).** La asignación automática forma equipos de exactamente 3 y
   reporta a los 1–2 alumnos sobrantes; el alta y la edición manual admiten 3 o 4 integrantes (Joi:
   `integrantesSchema.min(3).max(4)`), para que el profesor absorba a los sobrantes.
-- **Sin repetir compañeros por tipo.** Un alumno no puede tener dos equipos activos del mismo
-  tipo (Practica/Tarea/Proyecto) en la misma materia. `Practica` y `Tarea` son **espejo**: comparten
+- **Un equipo activo por tipo.** Un alumno no puede tener dos equipos activos del mismo
+  tipo en la misma materia, y `Practica` y `Tarea` cuentan como uno. `Proyecto` se valida aparte:
+  un alumno sí puede estar en un equipo de Práctica/Tarea y en uno de Proyecto a la vez, incluso con
+  los mismos compañeros (difiere de la lectura literal del requerimiento 5; ver
+  `docs/LIMITACIONES.md` §7). `Practica` y `Tarea` son **espejo**: comparten
   integrantes por diseño (`tiposEspejo()` en `asignacion.service.js`): cada equipo existe como dos filas
   enlazadas por `equipo.id_equipo_espejo`, y crear, editar o desactivar opera sobre ambas en una
   transacción (nunca se emparejan por nombre). `Proyecto` es independiente.
   Las actividades de tipo `En clase` también se asignan a los equipos de tipo `Tarea` de la materia.
-- **`entrega_por_equipo`.** Si `TRUE`, la primera entrega de cualquier integrante marca
-  automáticamente a todo el equipo como entregado (una transacción SQL); si `FALSE`, cada
+- **`entrega_por_equipo`.** Si `TRUE`, la primera entrega de cualquier integrante crea
+  la entrega de todo el equipo con estatus `'En revision'` (una transacción SQL); si `FALSE`, cada
   integrante debe subir su propio archivo y los demás quedan `Pendiente` hasta que lo hagan.
 - **Calificaciones grupales por defecto.** Registrar una nota aplica la misma calificación a
-  los 3 integrantes del equipo (`individual = FALSE`); el profesor puede ajustar una fila
+  todos los integrantes del equipo (`individual = FALSE`); el profesor puede ajustar una fila
   puntual con `PATCH /calificaciones/:id/individual`, que la marca `individual = TRUE` sin tocar
   al resto del equipo.
 - **Visibilidad de actividades programadas.** Una actividad con `programada = TRUE` es

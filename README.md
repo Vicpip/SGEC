@@ -30,7 +30,7 @@ El SGEC centraliza la administración de equipos de trabajo dentro de las materi
 El sistema permite:
 
 - Crear semestres, materias y grupos académicos.
-- Formar equipos de 3 integrantes con asignación aleatoria sin repetición.
+- Formar equipos de 3 integrantes con asignación aleatoria (un alumno no repite equipo del mismo tipo en una materia).
 - Importar listas de alumnos desde Excel (`.xlsx`).
 - Publicar actividades con fecha límite y publicación programada.
 - Registrar calificaciones grupales o individuales por actividad.
@@ -43,7 +43,7 @@ El sistema permite:
 
 - Autenticación con cuenta institucional (`@escom.ipn.mx` / `@alumno.ipn.mx`) y JWT.
 - Tres roles con vistas y permisos diferenciados.
-- Asignación aleatoria de integrantes con restricción de no repetición entre tipos de equipo.
+- Asignación aleatoria de integrantes: un alumno no puede estar en dos equipos activos del mismo tipo en una materia (Práctica y Tarea comparten integrantes).
 - Calificaciones grupales con opción de ajuste individual por alumno.
 - Publicación programada de actividades (visibles al alumno solo desde la fecha configurada).
 - Borrado lógico: los registros no se eliminan físicamente, conservando el historial.
@@ -142,7 +142,7 @@ sgec/
 │   │   │   ├── role.middleware.js   # Verificar rol (admin, profesor, alumno)
 │   │   │   └── validate.middleware.js
 │   │   ├── services/               # Lógica de negocio reutilizable
-│   │   │   ├── asignacion.service.js   # Algoritmo aleatorio sin repetición
+│   │   │   ├── asignacion.service.js   # Asignación aleatoria (un equipo activo por tipo)
 │   │   │   ├── excel.service.js        # Parseo de archivos xlsx
 │   │   │   ├── reporte.service.js      # Generación PDF/Excel
 │   │   │   └── publicacion.service.js  # Scheduler publicación programada
@@ -333,7 +333,7 @@ Además de las 19 pantallas, el sistema tiene rutas auxiliares: `/recuperar-pass
 ## Reglas de negocio
 
 - La asignación automática forma equipos de exactamente **3 integrantes** y reporta a los 1–2 alumnos que sobran; el alta y la edición manual admiten **3 o 4** (para absorber a los sobrantes).
-- Un alumno **no puede repetir** equipo por tipo (Práctica, Tarea, Proyecto) dentro de la misma materia.
+- Un alumno **no puede estar en dos equipos activos del mismo tipo** dentro de la misma materia; Práctica y Tarea cuentan como uno. Proyecto se valida aparte: un alumno puede tener equipo de Práctica/Tarea y de Proyecto a la vez. Esta lectura del requerimiento 5 está pendiente de confirmar con el asesor (`docs/LIMITACIONES.md` §7).
 - Los equipos de `Práctica` y de `Tarea` **comparten los mismos integrantes** (cada equipo existe como dos filas enlazadas, que se crean, editan y desactivan juntas); `Proyecto` se forma aparte. Las actividades de tipo `En clase` se asignan a esos mismos equipos de Práctica/Tarea: `En clase` es un tipo de **actividad**, no de equipo.
 - Las calificaciones son **grupales por defecto**; el profesor puede ajustarlas individualmente (flag `individual = TRUE` en `calificacion`).
 - Las actividades con `programada = TRUE` son invisibles al alumno hasta que se alcanza `fecha_publicacion`.

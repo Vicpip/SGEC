@@ -10,7 +10,7 @@ real en cada paso.
 
 > Si lo que vas a hacer es **actualizar** una instalación que ya existe, no sigas esta guía:
 > usa la sección "Actualizar una instalación existente" al final y, para el redeploy de las
-> sesiones 13 a 16, el checklist `docs/cierre/S16-checklist-manual.md`.
+> sesiones 13 a 17, el checklist `docs/cierre/S16-checklist-manual.md`.
 
 ---
 

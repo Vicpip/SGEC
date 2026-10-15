@@ -354,9 +354,12 @@ solo se leyó) está en [cierre/S13.md](./cierre/S13.md).
   activó su cuenta; queda un riesgo residual acotado: mientras la cuenta siga sin activar, un
   profesor que la tenga inscrita puede regenerar la temporal (es el mecanismo previsto para
   entregar el acceso) y el restablecimiento queda en el log.
-- El Administrador puede restablecer a cualquier alumno, pero **no hay pantalla para ello**: solo
+- ~~El Administrador puede restablecer a cualquier alumno, pero no hay pantalla para ello: solo
   existe el endpoint. Hasta que se agregue, el camino normal de un alumno ya activado es "Olvidé
-  mi contraseña", que depende de que el correo SMTP esté configurado.
+  mi contraseña", que depende de que el correo SMTP esté configurado.~~ **Resuelto en la
+  Sesión 15** (`08a032d`): pantalla "Accesos de alumnos" (`/admin/accesos`,
+  `pages/admin/AccesosAlumnos.jsx`), con buscador por correo o boleta y botón para restablecer el
+  acceso, sin depender del SMTP.
 - ~~Los JWT son sin estado: tras `restablecer-acceso`, un token normal que el alumno ya tuviera
   sigue siendo válido hasta expirar.~~ **Resuelto en la Sesión 16** (ver más abajo):
   `auth.middleware.js` consulta la cuenta en cada petición y rechaza los tokens anteriores al

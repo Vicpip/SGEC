@@ -25,8 +25,8 @@ npm install
 cp .env.example .env       # editar credenciales de MySQL y JWT_SECRET
 npm run dev                 # nodemon, puerto 3001
 
-# 3. Frontend (otra terminal)
-cd client
+# 3. Frontend (otra terminal; ruta relativa a server/, donde terminó el paso 2)
+cd ../client
 npm install
 cp .env.example .env        # VITE_API_URL=http://localhost:3001/api
 npm run dev                 # Vite, puerto 5173
@@ -163,8 +163,15 @@ docker compose up -d --build
 ### Migraciones de base de datos
 
 `schema.sql` solo se carga cuando el volumen de MySQL se crea por primera vez. Una base que ya
-existía necesita las migraciones de `server/db/migrations/` aplicadas a mano, **antes** de
-levantar el código nuevo:
+existía necesita las migraciones de `server/db/migrations/` aplicadas a mano, en orden (002 a
+005). Cuándo:
+
+- **Con Docker:** los scripts viajan dentro de la imagen nueva del servidor, así que se aplican
+  **inmediatamente después** de `docker compose up -d --build` (como el paso 3 de
+  `docs/cierre/S16-checklist-manual.md` y "Actualizar una instalación existente" en
+  [DEPLOY.md](../DEPLOY.md)). Entre el `up` y la última migración el sistema responde 500.
+- **Sin Docker:** antes de arrancar el código nuevo (`node server/db/migrations/aplicar_00X.js`
+  con el `server/.env` de esa instalación).
 
 | Migración | Sesión | Qué agrega | Cómo aplicarla |
 |---|---|---|---|
@@ -195,7 +202,7 @@ cambio de contraseña y el restablecimiento por enlace fallan con error 500 (col
 Sin la 003, el código de la Sesión 14 responde 500 en casi todo lo que usa el alumno y el profesor
 (listados de alumnos, actividades, avisos, entregas, equipos y dashboard), porque todas esas
 consultas filtran por `materia_alumno.activo` o leen `actividad.tipo_evaluacion`. Las migraciones
-se aplican en orden (002, 003 y 004). Sin la 004, el código de la Sesión 15 responde 500 en equipos,
+se aplican en orden (002 a 005). Sin la 004, el código de la Sesión 15 responde 500 en equipos,
 reportes y el panel del alumno (leen `equipo.id_equipo_espejo`). La 004 no borra nada: agrega la columna y
 enlaza entre sí las filas de Práctica y Tarea que tengan la misma materia y el mismo nombre y estén activas;
 un nombre repetido dentro de la misma materia y tipo se deja sin enlazar y el script lo reporta.
@@ -222,7 +229,9 @@ Para ensayar sin enviar nada, `EMAIL_DRY_RUN=true`: el log muestra destinatario 
 correo que se habría enviado.
 
 Comandos útiles: `docker compose logs <server|client|db> -f`, `docker compose restart <servicio>`,
-`docker compose down` (agregar `-v` solo si de verdad quieres borrar el volumen de MySQL).
+`docker compose down` (detiene los contenedores; los datos se conservan). **Nunca** uses
+`docker compose down -v` en producción: borra todos los volúmenes del compose, es decir, **elimina
+la base de datos y los archivos subidos**.
 
 ### Antes de exponer el sitio al público
 

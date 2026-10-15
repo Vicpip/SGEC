@@ -124,13 +124,49 @@ equipo de 4 puede quedarse en 3 sin sustituir a nadie.
 
 ## 7. Regla de integrantes pendiente de confirmar (decisión 1)
 
-El sistema implementa: los equipos de Práctica y de Tarea comparten integrantes (cada equipo son
-dos filas enlazadas por `id_equipo_espejo`), Proyecto se forma aparte, y las actividades En clase
-van a los equipos de Práctica/Tarea. El requerimiento 5 original puede leerse de otra forma (por
-ejemplo, que cada tipo tenga equipos independientes). La decisión 1 del plan de cierre conservó el
-diseño actual y solo corrigió su consistencia técnica; **queda pendiente confirmarlo con el
-asesor**. Si exigiera otra regla, el cambio no es menor: toca la asignación, el alta manual, la
-migración 004 y el reporte.
+**Requerimiento original** (documento del servicio social, punto 5), literal: "Elegir
+aleatoriamente 3 integrantes por equipo sin que se repitan, es decir, si se eligieron 3 alumnos
+para prácticas ya no pueden repetir en los otros 2 equipos."
+
+La lectura literal es que un alumno colocado en un equipo de Prácticas no aparece en los equipos
+de los otros dos tipos (Tarea y Proyecto).
+
+**Lo que hace el sistema hoy** (contrastado con `asignacion.service.js`,
+`equipos.controller.js` y `schema.sql`, 14 de octubre de 2026):
+
+- **Única restricción:** un alumno no puede estar en dos equipos **activos** del mismo tipo dentro
+  de la misma materia, y Práctica y Tarea cuentan como un solo tipo (`tiposEspejo()`). Lo
+  comprueba `idsAlumnosConEquipoDeTipo()` en el alta manual y en la edición (409 "El alumno con id
+  … ya tiene un equipo de tipo … en esta materia") y la generación automática deja fuera a quien ya
+  tiene equipo de ese tipo. Es una validación de la aplicación: en la base solo existe
+  `UNIQUE (id_equipo, id_alumno)` (nadie repetido dentro de un mismo equipo).
+- **Práctica y Tarea son el mismo equipo por diseño:** cada equipo existe como dos filas de
+  `equipo` (una por tipo, mismos integrantes) enlazadas por `id_equipo_espejo`; se crean, editan y
+  desactivan juntas. Las actividades En clase van a esos mismos equipos (los de Tarea).
+- **Proyecto se forma aparte** y solo se valida contra otros equipos de Proyecto: un mismo alumno
+  **sí puede** estar a la vez en un equipo de Práctica/Tarea y en uno de Proyecto, y nada impide
+  que en Proyecto le toquen los mismos compañeros (la generación es aleatoria y no mira los equipos
+  de Práctica/Tarea).
+- Los equipos desactivados no cuentan, y entre materias distintas no hay restricción.
+
+**Dónde difiere de la lectura literal:** con la lectura literal, quien está en un equipo de
+Prácticas no estaría en ningún equipo de Tarea ni de Proyecto. En el sistema, todo alumno de un
+equipo de Práctica está por diseño en el equipo de Tarea gemelo, y puede estar también en un
+equipo de Proyecto, incluso con los mismos compañeros.
+
+La decisión 1 del plan de cierre conservó el diseño actual y solo corrigió su consistencia
+técnica; **queda pendiente confirmarlo con el asesor**. Si exigiera otra regla, el cambio no es
+menor. Tocaría, como mínimo (lista contrastada con el código):
+
+- `asignacion.service.js` (`tiposEspejo()`, `tipoEspejoDe()`) y, en `equipos.controller.js`, el
+  alta manual, la edición, la desactivación y la generación automática.
+- La migración 004 (`004_equipo_espejo.sql`, `aplicar_004.js`), que enlaza los equipos existentes,
+  y los datos de demostración (`seeds/06_equipos.sql`).
+- El reporte (`reportes.controller.js`, que presenta el par Práctica/Tarea como una sola fila).
+- `tipoEquipoParaActividad()`, repetida en `actividades`, `entregas`, `calificaciones` y
+  `alumnos.controller.js` y en `PublicarActividad.jsx` (a qué equipos va cada tipo de actividad).
+- El panel del alumno (`dashboard.controller.js`) y las pantallas `ListaEquipos.jsx` y
+  `DetalleEquipo.jsx` (avisos y tarjetas del espejo).
 
 ## 8. Arquitectura de equipos fija y sin validación de grupos en el Excel (decisión 7)
 

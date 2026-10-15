@@ -134,8 +134,8 @@ Rutas de la API montadas en `app.js`: `/api/auth`, `/api/usuarios`, `/api/semest
 
 Servicios de negocio en `server/src/services/`:
 
-- `asignacion.service.js` — asignación aleatoria de integrantes a equipos de 3, sin repetir
-  compañeros por tipo de equipo dentro de la misma materia.
+- `asignacion.service.js` — asignación aleatoria de integrantes a equipos de 3 entre los alumnos
+  que aún no tienen equipo activo de ese tipo en la materia (Práctica y Tarea cuentan como uno).
 - `excel.service.js` — parseo y validación fila por fila de listas de alumnos (`.xlsx`).
 - `reporte.service.js` — reportes de desempeño en PDF y Excel.
 - `publicacion.service.js` — condición SQL de visibilidad de actividades programadas.
@@ -186,8 +186,10 @@ Ver DDL completo en `server/db/schema.sql`.
 
 - La asignación automática forma equipos de exactamente **3 integrantes** y reporta a los 1–2
   sobrantes (`sin_asignar`); el alta y la edición manual admiten **3 o 4**.
-- Un alumno **no puede repetir** equipo por tipo (Práctica, Tarea, Proyecto) dentro de la misma
-  materia.
+- Un alumno **no puede estar en dos equipos activos del mismo tipo** dentro de la misma materia,
+  y Práctica y Tarea cuentan como un solo tipo (`tiposEspejo()`). Proyecto se valida aparte: un
+  alumno sí puede tener equipo de Práctica/Tarea y de Proyecto a la vez, incluso con los mismos
+  compañeros. Difiere de la lectura literal del requerimiento 5 (`docs/LIMITACIONES.md` §7).
 - Los equipos `Practica` y `Tarea` **comparten los mismos integrantes**: cada equipo son dos filas
   de `equipo` enlazadas por `id_equipo_espejo`; crear, editar y desactivar opera siempre sobre
   ambas en una transacción (nunca emparejar por nombre). Las actividades `En clase` se asignan a
@@ -343,8 +345,10 @@ compara el esquema con `server/db/comparar_esquema.js`. Todo está en
 - Recorrer `docs/PRUEBAS-MANUALES.md` en el dominio con los tres roles.
 - Confirmar con el asesor la regla de integrantes (`docs/LIMITACIONES.md` §7).
 - Configurar el SMTP real en el `.env` del servidor (opcional).
-- Borrar las bases temporales de MySQL local que dejaron las sesiones 13 a 17 (lista en
-  `docs/cierre/S17.md`; el entorno de Claude bloquea `DROP`).
+- Borrar las bases temporales de MySQL local (el entorno de Claude bloquea `DROP`). Según
+  `SHOW DATABASES` del 14 de octubre quedan nueve: de S16, `sgec_s16_tmp`, `sgec_s16_tmp2`,
+  `sgec_s16_tmp3` y `sgec_s16_tmp4`; de S17, `sgec_s17_tmp`, `sgec_s17_esq_a`, `sgec_s17_esq_b`,
+  `sgec_s17_sep` y `sgec_s17_restore`. Las de S13 a S15 ya no existen. La base `sgec` no se borra.
 
 Funcionalidades nuevas planeadas después del cierre (S18 PWA y notificaciones push, S19 avisos
 de alumnos): se trabajan en la rama `feature/pwa-avisos` según `PLAN-CIERRE.md` y solo se
