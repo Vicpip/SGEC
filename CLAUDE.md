@@ -189,7 +189,9 @@ Ver DDL completo en `server/db/schema.sql`.
 - Un alumno **no puede estar en dos equipos activos del mismo tipo** dentro de la misma materia,
   y Práctica y Tarea cuentan como un solo tipo (`tiposEspejo()`). Proyecto se valida aparte: un
   alumno sí puede tener equipo de Práctica/Tarea y de Proyecto a la vez, incluso con los mismos
-  compañeros. Difiere de la lectura literal del requerimiento 5 (`docs/LIMITACIONES.md` §7).
+  compañeros. El requerimiento 5 es ambiguo (A: no repetir entre tipos; B: no repetir dentro del
+  mismo tipo); el sistema implementa B, ninguna es oficial y está pendiente de confirmar con el
+  asesor. Trabajo futuro propuesto: configuración por materia (`docs/LIMITACIONES.md` §7).
 - Los equipos `Practica` y `Tarea` **comparten los mismos integrantes**: cada equipo son dos filas
   de `equipo` enlazadas por `id_equipo_espejo`; crear, editar y desactivar opera siempre sobre
   ambas en una transacción (nunca emparejar por nombre). Las actividades `En clase` se asignan a

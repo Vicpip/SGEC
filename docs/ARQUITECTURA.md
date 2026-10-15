@@ -150,8 +150,9 @@ usuario (1) ── (1) profesor ── (N) materia ── (N) equipo ── (N) 
 - **Un equipo activo por tipo.** Un alumno no puede tener dos equipos activos del mismo
   tipo en la misma materia, y `Practica` y `Tarea` cuentan como uno. `Proyecto` se valida aparte:
   un alumno sí puede estar en un equipo de Práctica/Tarea y en uno de Proyecto a la vez, incluso con
-  los mismos compañeros (difiere de la lectura literal del requerimiento 5; ver
-  `docs/LIMITACIONES.md` §7). `Practica` y `Tarea` son **espejo**: comparten
+  los mismos compañeros. Es la lectura B de un requerimiento ambiguo (A: no repetir entre tipos;
+  B: no repetir dentro del mismo tipo), pendiente de confirmar con el asesor; ver
+  `docs/LIMITACIONES.md` §7. `Practica` y `Tarea` son **espejo**: comparten
   integrantes por diseño (`tiposEspejo()` en `asignacion.service.js`): cada equipo existe como dos filas
   enlazadas por `equipo.id_equipo_espejo`, y crear, editar o desactivar opera sobre ambas en una
   transacción (nunca se emparejan por nombre). `Proyecto` es independiente.

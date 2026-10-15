@@ -15,7 +15,7 @@ Resumen:
 | 4 | Equipos de Práctica/Tarea anteriores a la Sesión 15 sin espejo | Datos heredados |
 | 5 | Dar de baja a un alumno que está en un equipo exige rehacer el equipo | Funcional |
 | 6 | Reporte: sobrantes, porcentaje sin tardías y promedio solo de lo calificado | Funcional (decisión 5) |
-| 7 | Regla de integrantes pendiente de confirmar con el asesor | Requerimiento (decisión 1) |
+| 7 | Regla de integrantes: requerimiento ambiguo, pendiente de confirmar con el asesor | Requerimiento (decisión 1) |
 | 8 | Arquitectura de equipos fija y sin validación de grupos en el Excel | Trabajo futuro (decisión 7) |
 | 9 | Sin pruebas automatizadas | Calidad |
 | 10 | Cliente sin configuración de ESLint | Calidad |
@@ -122,14 +122,20 @@ equipo de 4 puede quedarse en 3 sin sustituir a nadie.
   tardías de entregas a tiempo.
 - El promedio del reporte solo considera las actividades calificadas (decisión 5 del plan).
 
-## 7. Regla de integrantes pendiente de confirmar (decisión 1)
+## 7. Regla de integrantes: requerimiento ambiguo, pendiente de confirmar (decisión 1)
 
 **Requerimiento original** (documento del servicio social, punto 5), literal: "Elegir
 aleatoriamente 3 integrantes por equipo sin que se repitan, es decir, si se eligieron 3 alumnos
 para prácticas ya no pueden repetir en los otros 2 equipos."
 
-La lectura literal es que un alumno colocado en un equipo de Prácticas no aparece en los equipos
-de los otros dos tipos (Tarea y Proyecto).
+La frase es **ambigua**: admite dos lecturas y ninguna de las dos se puede dar por oficial
+mientras el asesor no lo confirme.
+
+- **Lectura A — no repetir entre tipos.** Un alumno colocado en un equipo de Prácticas no aparece
+  en los equipos de los otros dos tipos (Tarea y Proyecto).
+- **Lectura B — no repetir dentro del mismo tipo.** Un alumno no aparece en dos equipos del mismo
+  tipo; "los otros 2 equipos" serían los demás equipos que se forman. Es la que implementa el
+  sistema hoy.
 
 **Lo que hace el sistema hoy** (contrastado con `asignacion.service.js`,
 `equipos.controller.js` y `schema.sql`, 14 de octubre de 2026):
@@ -149,14 +155,22 @@ de los otros dos tipos (Tarea y Proyecto).
   de Práctica/Tarea).
 - Los equipos desactivados no cuentan, y entre materias distintas no hay restricción.
 
-**Dónde difiere de la lectura literal:** con la lectura literal, quien está en un equipo de
-Prácticas no estaría en ningún equipo de Tarea ni de Proyecto. En el sistema, todo alumno de un
-equipo de Práctica está por diseño en el equipo de Tarea gemelo, y puede estar también en un
-equipo de Proyecto, incluso con los mismos compañeros.
+**Relación con las dos lecturas:** el sistema sigue la lectura B, con una decisión de diseño
+añadida (Práctica y Tarea comparten integrantes y cuentan como un solo tipo). Con la lectura A,
+quien está en un equipo de Prácticas no estaría en ningún equipo de Tarea ni de Proyecto; en el
+sistema, todo alumno de un equipo de Práctica está en el equipo de Tarea gemelo y puede estar
+también en uno de Proyecto, incluso con los mismos compañeros.
 
 La decisión 1 del plan de cierre conservó el diseño actual y solo corrigió su consistencia
-técnica; **queda pendiente confirmarlo con el asesor**. Si exigiera otra regla, el cambio no es
-menor. Tocaría, como mínimo (lista contrastada con el código):
+técnica; **queda pendiente confirmar con el asesor cuál de las dos lecturas aplica**.
+
+**Solución propuesta (trabajo futuro):** una configuración por materia en la que el profesor
+defina los tipos de equipo, el número de integrantes, si el trabajo es individual y la regla de
+repetición (lectura A, lectura B u otra). Así el sistema no tendría que fijar una sola
+interpretación. Exige rediseñar el modelo de datos (ver §8).
+
+Mientras tanto, cambiar a la lectura A u otra regla fija no es menor. Tocaría, como mínimo
+(lista contrastada con el código):
 
 - `asignacion.service.js` (`tiposEspejo()`, `tipoEspejoDe()`) y, en `equipos.controller.js`, el
   alta manual, la edición, la desactivación y la generación automática.
@@ -176,7 +190,8 @@ Fuera del alcance del cierre, documentado como trabajo futuro:
   esquema, igual para todas las materias; qué tipos comparten integrantes está fijo en el código
   (`tiposEspejo()` en `asignacion.service.js`); el tamaño es 3 en la asignación automática y 3 o 4
   en la manual. Una versión configurable por materia (tipos, cuáles comparten integrantes, tamaño
-  de 1 a N) exige rediseñar el modelo de datos.
+  de 1 a N o trabajo individual, y la regla de repetición de §7) exige rediseñar el modelo de
+  datos.
 - **El grupo del Excel no se valida contra la materia.** `excel.service.js` exige que la columna
   `grupo` venga llena, pero no comprueba que coincida con el grupo de la materia a la que se
   importa: un alumno de 4CM2 puede quedar inscrito en una materia de 4CM1 si así viene en el
