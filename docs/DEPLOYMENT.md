@@ -164,7 +164,7 @@ docker compose up -d --build
 
 `schema.sql` solo se carga cuando el volumen de MySQL se crea por primera vez. Una base que ya
 existía necesita las migraciones de `server/db/migrations/` aplicadas a mano, en orden (002 a
-005). Cuándo:
+005 y, en la rama de equipos, la 008). Cuándo:
 
 - **Con Docker:** los scripts viajan dentro de la imagen nueva del servidor, así que se aplican
   **inmediatamente después** de `docker compose up -d --build` (como el paso 3 de
@@ -179,7 +179,7 @@ existía necesita las migraciones de `server/db/migrations/` aplicadas a mano, e
 | `003_tipo_evaluacion_y_baja_alumno.sql` | 14 | `actividad.tipo_evaluacion` y `materia_alumno.activo` | `node server/db/migrations/aplicar_003.js` (idempotente columna por columna) |
 | `004_equipo_espejo.sql` | 15 | `equipo.id_equipo_espejo` (columna, índice y llave foránea) y el emparejamiento de los equipos Práctica/Tarea existentes | `node server/db/migrations/aplicar_004.js` (idempotente paso por paso; al terminar lista los equipos que quedaron sin espejo y los pares con integrantes distintos, para revisarlos a mano) |
 | `005_contrasena_cambiada_en.sql` | 16 | `usuario.contrasena_cambiada_en` (momento del último cambio de contraseña; los tokens anteriores se rechazan) | `node server/db/migrations/aplicar_005.js` (idempotente) |
-| `008_materia_ajustes_equipos.sql` | E1 (rama `feature/equipos-configurables`) | Configuración de equipos en `materia`: `equipo_tamano_auto`, `equipo_min`, `equipo_max`, `regla_repeticion`, `usa_practica`, `usa_tarea`, `usa_proyecto`, con valores por defecto que reproducen el comportamiento anterior | `node server/db/migrations/aplicar_008.js` (idempotente columna por columna). Va en el checklist de la actualización que lleve esta rama, no en el de S16 |
+| `008_materia_ajustes_equipos.sql` | E1 (rama `feature/equipos-configurables`) | Configuración de equipos en `materia`: `equipo_tamano_auto`, `equipo_min`, `equipo_max`, `regla_repeticion`, `usa_practica`, `usa_tarea`, `usa_proyecto`, con valores por defecto que reproducen el comportamiento anterior | `node server/db/migrations/aplicar_008.js` (idempotente columna por columna). Va en el paso 3 de `docs/cierre/S16-checklist-manual.md` y en su sección "Caso: la VPS ya tiene S13 a S17" |
 
 Con Docker, desde la carpeta del repo en el servidor:
 
@@ -188,6 +188,7 @@ docker compose exec server node db/migrations/aplicar_002.js
 docker compose exec server node db/migrations/aplicar_003.js
 docker compose exec server node db/migrations/aplicar_004.js
 docker compose exec server node db/migrations/aplicar_005.js
+docker compose exec server node db/migrations/aplicar_008.js    # rama de equipos
 ```
 
 **Numeración y orden.** Los números 006 y 007 están reservados para la rama `feature/pwa-avisos`
@@ -197,7 +198,7 @@ estaba aplicada, y 006/007 tocan tablas distintas de las de la 008, así que las
 fusionar en cualquier orden y un hueco en la numeración (por ejemplo, la 008 en producción antes
 que la 006) no rompe nada. La regla para cada actualización es: **aplica todas las migraciones
 presentes en `server/db/migrations/` que falten, en orden numérico**. Sin la 008, el código de E1
-responde 500 en materias y equipos (leen las columnas nuevas de `materia`).
+responde 500 en todo `/api/materias` salvo desactivar, en las rutas que resuelven la materia por clave (alumnos, equipos, actividades) y en el alta, edición y asignación de equipos (leen las columnas nuevas de `materia`); el inicio de sesión, el dashboard y las entregas siguen funcionando.
 
 Después de migrar, compara la base contra una creada con el `schema.sql` del repositorio:
 `node server/db/comparar_esquema.js <base_migrada> <base_nueva>` (solo lectura; tablas,
@@ -205,14 +206,16 @@ columnas, índices y llaves foráneas; código de salida 0 = iguales, 1 = difere
 comparar). Los comandos exactos con Docker, incluida la creación de la base `sgec_check`, están en
 el paso 3 de `docs/cierre/S16-checklist-manual.md`. Probado en la Sesión 17 con una copia del
 volcado de septiembre: antes de migrar reporta exactamente las 7 diferencias que aportan las
-migraciones 002–005; después, ninguna.
+migraciones 002–005 (14 si se compara contra el `schema.sql` de la rama de equipos, que suma las 7
+columnas de la 008; medido el 20 de octubre sobre el mismo volcado); después de aplicar todas,
+ninguna.
 
 Si se despliega el código de la Sesión 13 sin esta migración, el alta/importación de alumnos, el
 cambio de contraseña y el restablecimiento por enlace fallan con error 500 (columna inexistente).
 Sin la 003, el código de la Sesión 14 responde 500 en casi todo lo que usa el alumno y el profesor
 (listados de alumnos, actividades, avisos, entregas, equipos y dashboard), porque todas esas
 consultas filtran por `materia_alumno.activo` o leen `actividad.tipo_evaluacion`. Las migraciones
-se aplican en orden (002 a 005). Sin la 004, el código de la Sesión 15 responde 500 en equipos,
+se aplican en orden (002 a 005, y la 008 en la rama de equipos). Sin la 004, el código de la Sesión 15 responde 500 en equipos,
 reportes y el panel del alumno (leen `equipo.id_equipo_espejo`). La 004 no borra nada: agrega la columna y
 enlaza entre sí las filas de Práctica y Tarea que tengan la misma materia y el mismo nombre y estén activas;
 un nombre repetido dentro de la misma materia y tipo se deja sin enlazar y el script lo reporta.

@@ -348,9 +348,12 @@ instrucciones originales en `docs/historial-sesiones.md`.
 | S17 | Cierre documental | ✅ Completa | ee0b5d2 | ad1ad68 |
 
 Migraciones: `002` (S13), `003` (S14), `004` (S15) y `005` (S16) se aplican, en ese orden, en
-toda base existente al desplegar (sin la 005 toda ruta autenticada responde 500). Después se
-compara el esquema con `server/db/comparar_esquema.js`. Todo está en
-`docs/cierre/S16-checklist-manual.md`.
+toda base existente al desplegar (sin la 005 toda ruta autenticada responde 500); la rama
+`feature/equipos-configurables` suma la `008` (sin ella, Materias, Equipos y las rutas por clave de
+materia responden 500). Regla: aplicar todas las de `server/db/migrations/` que falten, en orden
+numérico. Después se compara el esquema con `server/db/comparar_esquema.js`. Todo está en
+`docs/cierre/S16-checklist-manual.md` (cubre S13 a S17 y E1 a E3, con una sección para la VPS que
+ya tiene `main`).
 
 **Pendientes (no los puede hacer Claude):**
 
@@ -385,7 +388,7 @@ y el trabajo individual (Etapa 3).
 Correcciones del recorrido de interfaz (`docs/cierre/E-recorrido.md`, sección "Correcciones"): commit `b02c2cf`.
 Pendientes de ese recorrido: `docs/LIMITACIONES.md` §16.
 
-Bases temporales para borrado manual: de E1, `sgec_eq_tmp`, `sgec_eq_sep`, `sgec_eq_parcial`; de
+Bases temporales para borrado manual: de esta revisión de despliegue, `sgec_e4_sep` y `sgec_e4_nueva`; de E1, `sgec_eq_tmp`, `sgec_eq_sep`, `sgec_eq_parcial`; de
 E2, `sgec_e2_tmp` y `sgec_e2_old`; de las correcciones del recorrido, `sgec_e3_tmp`.
 
 Limitaciones conocidas: `docs/LIMITACIONES.md` (16 puntos, con resumen al inicio).

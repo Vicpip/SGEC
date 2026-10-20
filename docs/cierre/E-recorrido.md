@@ -170,7 +170,7 @@ temporales de otras sesiones.
 | H5 | `MisCalificaciones.jsx`: "Sin equipo asignado" pasa a "Equipo desactivado". | Alumno con el Equipo 1 desactivado: "Mis calificaciones" agrupa sus 4 notas como "Equipo desactivado". | Ninguno |
 | H8 | `MisActividades.jsx`: "Aún no tienes actividades dirigidas a tus equipos." | Mismo alumno: se ve el texto nuevo. | Ninguno |
 | H9 | `entregas.controller.js` (GET de entregas de una actividad, alumno): el 403 dice "No tienes permiso para ver esta actividad", como `GET /actividades/:id`. El POST de entregar conserva "No perteneces…". Mismo código de estado. | Por API con el alumno del equipo desactivado: `GET /entregas/actividad/:id` y `GET /actividades/:id` responden 403 con el mismo texto, en las dos actividades. | Ninguno |
-| H10 | `DetalleEquipo.jsx` y `ListaEquipos.jsx`: el diálogo de desactivar dice "otro equipo" en lugar de "otro equipo de ese tipo". | Solo leído en el código (no se abrió el diálogo). | Ninguno |
+| H10 | `DetalleEquipo.jsx` y `ListaEquipos.jsx`: el diálogo de desactivar dice "otro equipo" en lugar de "otro equipo de ese tipo". | Solo leído en el código (no se abrió el diálogo). | Abrir el diálogo en el navegador: `docs/PRUEBAS-MANUALES.md`, E13 |
 | H6, H7, H11, H12 | No se tocaron: cambian lógica, agregan elementos de interfaz o contratos de la API, o son cosméticos. | — | Ver `LIMITACIONES.md` §16 |
 
 Limitaciones de esta verificación: el "antes" del Excel y del 403 no se capturó con el código

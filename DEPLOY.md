@@ -168,15 +168,21 @@ git pull
 docker compose up -d --build
 ```
 
-Si la actualización trae migraciones de base de datos, se aplican justo después, en orden
-(cada script es idempotente y no borra nada):
+Si la actualización trae migraciones de base de datos, se aplican justo después. Regla: **aplica
+todas las de `server/db/migrations/` que falten, en orden numérico**; cada script es idempotente,
+no borra nada y dice "no se hizo nada" si ya estaba aplicado. La 008 solo existe en la rama
+`feature/equipos-configurables`; en `main` bastan la 002 a la 005:
 
 ```bash
 docker compose exec server node db/migrations/aplicar_002.js
 docker compose exec server node db/migrations/aplicar_003.js
 docker compose exec server node db/migrations/aplicar_004.js
 docker compose exec server node db/migrations/aplicar_005.js
+docker compose exec server node db/migrations/aplicar_008.js    # rama de equipos
 ```
+
+Sin la 005 toda ruta autenticada responde 500; sin la 008, Materias, Equipos y las rutas por
+clave de materia.
 
 Después de migrar, comprueba que el esquema quedó igual al del repositorio con
 `server/db/comparar_esquema.js` (los comandos están en el paso 3 del checklist

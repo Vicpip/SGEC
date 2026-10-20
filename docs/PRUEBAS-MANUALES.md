@@ -192,7 +192,7 @@ alumnos y B6 formaría 2 equipos sin sobrantes).
 
 ## E. Equipos configurables (solo si se despliega la rama `feature/equipos-configurables`)
 
-Bloques de las sesiones E1 (E1–E7) y E2 (E8–E12). La lógica se probó por la API contra bases
+Bloques de las sesiones E1 (E1–E7), E2 (E8–E12) y de las correcciones del recorrido (E13). La lógica se probó por la API contra bases
 temporales (53 comprobaciones en `docs/cierre/E1.md`, 88 en `docs/cierre/E2.md`); **ninguna de estas
 pantallas se abrió en el navegador**.
 Requiere la migración 008 aplicada. Con el profesor de demostración y una materia de prueba nueva
@@ -246,6 +246,11 @@ con al menos 9 alumnos.
   panel y en Mis actividades aparece la de Práctica y **no** la de Proyecto; un alumno del equipo de
   Proyecto ve solo la de Proyecto. Un alumno inscrito sin equipo no ve ninguna de las dos. (Por la
   API, abrir la de Proyecto con el alumno de Práctica responde 403.)
+- [ ] **E13. Diálogo de desactivar equipo (H10 de `docs/cierre/E-recorrido.md`).** En Detalle del
+  Equipo (06) y en Lista de Equipos (04), con un equipo de la materia de prueba, pulsar
+  Desactivar: el texto dice que los integrantes "volverán a estar disponibles para otro equipo de
+  ese tipo". Es la única cadena corregida que no se abrió en el navegador. Cancelar y confirmar
+  funcionan; tras confirmar, el equipo ya no aparece activo.
 
 ---
 

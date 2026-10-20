@@ -1,4 +1,11 @@
-# Sesiones 13 a 17 — Checklist manual para el servidor de producción
+# Sesiones 13 a 17 y E1 a E3 — Checklist manual para el servidor de producción
+
+> **Alcance (20 de octubre de 2026).** El archivo conserva su nombre porque otros documentos lo
+> referencian. Cubre el redeploy de las sesiones 13 a 17 (`main`) y, en la rama
+> `feature/equipos-configurables` (sesiones E1 a E3), además la migración 008. Los pasos o
+> comprobaciones que solo valen para esa rama están marcados como "(rama de equipos)". Si la
+> VPS ya tiene la base de `main` y solo falta esta rama, ve a la sección "Caso: la VPS ya tiene
+> S13 a S17" al final.
 
 Lo ejecuta una persona con acceso al servidor. Nada de esto lo hizo Claude: las sesiones 16 y 17
 no tocaron el servidor ni enviaron una sola petición al dominio. Revisado en la Sesión 17
@@ -140,10 +147,20 @@ de ejemplo, es más seguro **recrearla** desde el `schema.sql` nuevo que migrarl
   agregado los puertos a mano), descártalos: el archivo del repositorio ya trae los puertos de
   producción. `git checkout -- docker-compose.yml && git pull`.
 
-## 3. Ruta A: aplicar las migraciones 002 a 005 — de inmediato
+## 3. Ruta A: aplicar las migraciones 002 a 005 y 008 — de inmediato
+
+Regla: **aplica todas las migraciones presentes en `server/db/migrations/` que falten, en orden
+numérico.** Cada `aplicar_00X.js` es independiente e idempotente y dice "no se hizo nada" si ya
+estaba aplicada, así que correr de más no daña. (Las 006 y 007 pertenecen a la rama
+`feature/pwa-avisos`; si esa rama también se despliega, aplícalas en su lugar numérico.)
 
 Hasta que se aplique la 005, **toda** ruta autenticada responde 500 (se puede iniciar sesión,
 pero nada más funciona). Sin la 002 fallan el alta de alumnos y el cambio de contraseña.
+(Rama de equipos) Sin la 008 el inicio de sesión, el dashboard, las entregas y las
+calificaciones sí funcionan, pero responden 500 todo `/api/materias` salvo desactivar (listar,
+obtener, crear y editar materias), las rutas que resuelven la materia por clave (lista,
+importación, alta y baja de alumnos; listado de equipos; actividades de una materia) y el alta,
+la edición y la asignación automática de equipos: leen las columnas nuevas de `materia`.
 
 - [ ] En orden. Cada script es idempotente y no borra nada:
 
@@ -152,6 +169,7 @@ pero nada más funciona). Sin la 002 fallan el alta de alumnos y el cambio de co
   docker compose exec server node db/migrations/aplicar_003.js
   docker compose exec server node db/migrations/aplicar_004.js
   docker compose exec server node db/migrations/aplicar_005.js
+  docker compose exec server node db/migrations/aplicar_008.js    # rama de equipos
   ```
 
 - [ ] **Leer la salida de `aplicar_004`.** Lista los equipos de Práctica/Tarea que quedaron sin
@@ -160,7 +178,10 @@ pero nada más funciona). Sin la 002 fallan el alta de alumnos y el cambio de co
 - [ ] **Comparar el esquema migrado contra uno nuevo.** Las sesiones 14 a 16 probaron las
   migraciones partiendo de esquemas del repositorio, no del real de producción. Se crea una base
   `sgec_check` con el `schema.sql` del repositorio, se da al usuario de la aplicación permiso de
-  solo lectura sobre ella, y se comparan:
+  solo lectura sobre ella, y se comparan. El `schema.sql` de la rama de equipos ya incluye la
+  008: si la omitiste, la comparación reporta sus 7 columnas de `materia` además de las de las
+  migraciones 002 a 005 (sobre el volcado de septiembre sin migrar: 14 diferencias en total, 7 más
+  7). Con todas aplicadas debe dar cero:
 
   ```bash
   docker compose exec -T db sh -c 'mysql -u root -p"$MYSQL_ROOT_PASSWORD" -e "CREATE DATABASE sgec_check CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"'
@@ -282,6 +303,11 @@ conocidos por terceros: borrarlos de los archivos no basta.
     Reportes (descargar PDF y Excel), Tablón.
   - **Alumno:** Mi Panel, Mis Equipos, Mis Actividades, entregar una actividad con un archivo de
     más de 1 MB, Mis Calificaciones, Tablón, Perfil.
+- [ ] (Rama de equipos) Recorrer el bloque E de `docs/PRUEBAS-MANUALES.md` (E1 a E13): formulario
+  de configuración de la materia, equipos de otro tamaño, regla de repetición, bloqueo con
+  equipos activos, lo que ve el alumno y el diálogo de desactivar equipo. El recorrido de interfaz
+  ya hecho con datos de demostración está en `docs/cierre/E-recorrido.md`; esto lo repite en el
+  servidor real. Si Materias o Equipos responden 500, falta la 008.
 - [ ] Zona horaria: publicar una actividad programada para dentro de 5 minutos y comprobar, con
   una cuenta de alumno, que no aparece antes y sí después. La hora de una entrega recién hecha
   coincide con la del reloj.
@@ -369,8 +395,8 @@ forma de volver atrás.
   Nunca uses `docker compose down -v`: borraría también el volumen de archivos subidos.
 - [ ] La base nueva ya tiene el esquema completo (migraciones incluidas). Comprobarlo:
   `docker compose exec -T db sh -c 'mysql -u root -p"$MYSQL_ROOT_PASSWORD" sgec -e "SHOW TABLES"'`
-  lista 16 tablas, y `docker compose exec server node db/migrations/aplicar_005.js` dice que la
-  columna ya existe.
+  lista 16 tablas, y `aplicar_005.js` y `aplicar_008.js` (`docker compose exec server node
+  db/migrations/aplicar_00X.js`) dicen que las columnas ya existen.
 - [ ] Revisar los puertos como en el paso 2 (`docker compose ps --format ...`).
 - [ ] Crear el Administrador real con `create_admin.js` (paso 5) y las cuentas de demostración.
   No hay cuentas de ejemplo que desactivar.
@@ -378,9 +404,30 @@ forma de volver atrás.
 
 ---
 
+## Caso: la VPS ya tiene S13 a S17 y solo falta la rama de equipos
+
+La base ya tiene las migraciones 002 a 005. El orden mínimo (los pasos de arriba tienen los
+comandos completos; aquí no se repiten secretos ni cuentas):
+
+- [ ] Paso 0: anotar el commit actual y respaldar base y archivos subidos.
+- [ ] Paso 2: `cd /var/www/sgec && git pull && docker compose up -d --build` (revisa
+  `docker compose ps`). La rama de equipos queda en el código; hasta el siguiente punto, Materias
+  y Equipos responden 500.
+- [ ] `docker compose exec server node db/migrations/aplicar_008.js` (si el commit trae
+  alguna migración más, aplícala también, en orden numérico).
+- [ ] Paso 3: comparar el esquema contra `sgec_check` (cero diferencias) y limpiar.
+- [ ] Paso 7: `/api/dashboard` en 200, Materias y Equipos cargan, y el bloque E de
+  `docs/PRUEBAS-MANUALES.md`.
+
+---
+
 ## Si algo sale mal
 
 - **Todo responde 500 después de iniciar sesión:** falta la migración 005 (paso 3).
+- **Entro bien, pero Materias, Alumnos de una materia, Equipos o Actividades dan 500 (el
+  Dashboard y las entregas sí cargan):** falta la migración 008 de la rama de equipos. Aplica
+  `docker compose exec server node db/migrations/aplicar_008.js` y repite la comparación de
+  esquema del paso 3.
 - **El inicio de sesión falla en todos los navegadores y la pestaña Red muestra `localhost`:**
   `VITE_API_URL` equivocado; corrige el `.env` y `docker compose up -d --build client` (paso 7).
 - **`sgec_server` se reinicia sin parar:** `docker compose logs server --tail 20`. Lo habitual es
@@ -390,7 +437,7 @@ forma de volver atrás.
 - **Volver atrás:** `git checkout <commit anotado en el paso 0> && docker compose up -d --build`.
   Las migraciones solo agregan columnas, así que el código anterior sigue funcionando con la
   base ya migrada. Los datos no se tocan; el respaldo del paso 0 es la última red. Antes del
-  siguiente `git pull`, regresa a la rama: `git checkout main` (con un commit suelto, `git pull`
+  siguiente `git pull`, regresa a la rama que sigue el servidor (p. ej. `git checkout main`) (con un commit suelto, `git pull`
   falla).
 - **Restaurar el respaldo** (último recurso; reemplaza los datos actuales de `sgec`):
   `docker compose exec -T db sh -c 'mysql -u root -p"$MYSQL_ROOT_PASSWORD" sgec' < ~/sgec-respaldo-<fecha>.sql`
