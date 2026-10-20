@@ -209,7 +209,7 @@ export default function MisActividades() {
         </div>
       ) : actividades.length === 0 ? (
         <div className="card">
-          <EmptyState icon={ClipboardList} title="Sin actividades asignadas" description="Aún no tienes actividades publicadas en tus materias." />
+          <EmptyState icon={ClipboardList} title="Sin actividades asignadas" description="Aún no tienes actividades dirigidas a tus equipos." />
         </div>
       ) : !vistaAgrupada ? (
         <div className="card">

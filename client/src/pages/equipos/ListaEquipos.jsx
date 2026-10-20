@@ -314,7 +314,7 @@ export default function ListaEquipos() {
           onConfirmar={handleConfirmarDesactivar}
         >
           El equipo <strong>{equipoADesactivar.nombre}</strong> ({TIPO_LABEL[equipoADesactivar.tipo]}) quedará desactivado: sus integrantes
-          volverán a estar disponibles para otro equipo de ese tipo y dejarán de recibir las actividades dirigidas
+          volverán a estar disponibles para otro equipo y dejarán de recibir las actividades dirigidas
           a él. Las entregas y calificaciones ya registradas se conservan.
           {equipoADesactivar.id_equipo_espejo && (
             <>

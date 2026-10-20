@@ -55,7 +55,7 @@ export default function MisCalificaciones() {
       const key = c.id_equipo ?? 'sin-equipo'
       const grupo = mapa.get(key) ?? {
         id: key,
-        nombre: c.equipo_nombre ?? 'Sin equipo asignado',
+        nombre: c.equipo_nombre ?? 'Equipo desactivado',
         tipo: c.equipo_tipo,
         calificaciones: [],
       }

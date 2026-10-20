@@ -232,7 +232,7 @@ const ENCABEZADOS_EXCEL_ACTIVIDADES = [
   'Actividad',
   'Tipo de actividad',
   'Tipo de evaluación',
-  'Entregas realizadas',
+  'Integrantes que la realizaron',
   'Integrantes',
   'Promedio',
 ]
@@ -262,7 +262,7 @@ function generarReporteExcel(datosReporte) {
       Actividad: act.titulo,
       'Tipo de actividad': TIPO_ACTIVIDAD_LABEL[act.tipo] ?? act.tipo,
       'Tipo de evaluación': act.tipo_evaluacion ?? '',
-      'Entregas realizadas': act.pares_realizados,
+      'Integrantes que la realizaron': act.pares_realizados,
       Integrantes: act.pares_total,
       Promedio: act.promedio ?? '',
     }))

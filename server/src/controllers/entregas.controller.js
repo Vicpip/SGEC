@@ -163,7 +163,7 @@ async function listarPorActividad(req, res) {
 
     soloIdEquipo = await idEquipoDelAlumnoParaActividad(actividad, miIdAlumno)
     if (!soloIdEquipo) {
-      return res.status(403).json({ error: 'No perteneces a un equipo asignado a esta actividad' })
+      return res.status(403).json({ error: 'No tienes permiso para ver esta actividad' })
     }
   }
 

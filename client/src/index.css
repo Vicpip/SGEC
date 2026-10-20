@@ -433,9 +433,9 @@ tr:last-child td { border-bottom: none; }
 @media (max-width: 768px) {
   /* Topbar / hamburger */
   .hamburger-btn { display: flex; flex-shrink: 0; }
-  .topbar { height: auto; min-height: var(--topbar-height); padding: 10px 14px; gap: 10px; display: flex; flex-direction: row; align-items: center; flex-wrap: nowrap; }
+  .topbar { height: auto; min-height: var(--topbar-height); padding: 10px 14px; gap: 10px; display: flex; flex-direction: row; align-items: center; flex-wrap: wrap; }
   .topbar-title { font-size: 14px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .topbar-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+  .topbar-right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; max-width: 100%; margin-left: auto; }
 
   /* Sidebar becomes an off-canvas drawer */
   .sidebar {

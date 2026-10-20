@@ -155,3 +155,30 @@ Observaciones que no cuentan como hallazgo:
 El entorno de Claude bloquea `DROP`. De este recorrido queda **`sgec_e2e_tmp`**. Siguen pendientes
 las anteriores: de E1, `sgec_eq_tmp`, `sgec_eq_sep` y `sgec_eq_parcial`; de E2, `sgec_e2_tmp` y
 `sgec_e2_old`; y las de S16 y S17 que lista `CLAUDE.md`. La base `sgec` no se borra.
+
+## Correcciones
+
+Fecha: 20 de octubre de 2026. Misma rama, partiendo de `2f10392`. Sin producción, sin dominio, sin
+`docker compose`, sin leer `.env`, sin push; no se tocaron migraciones, seeds, la base `sgec` ni las
+temporales de otras sesiones.
+
+| Hallazgo | Qué se cambió | Cómo se verificó | Pendiente |
+|---|---|---|---|
+| H1 | `BandejaEntregas.jsx`: `realizadoIntegrante` (entrega distinta de Pendiente o calificación registrada) y `calificadoIntegrante` (calificación registrada o estatus Calificada) alimentan el resumen ("N de M actividades realizadas · C calificadas · P pendientes"), el badge por integrante, el estatus y el contador de cada equipo ("realizadas") y el filtro de estatus. Quien tiene nota y no entregó muestra además el badge gris "Sin archivo". La tarjeta "Entregas recibidas N / M" no cambia. El estatus de la entrega en la base y la API de calificaciones no cambian. `reporte.service.js`: la columna de la hoja Actividades del Excel "Entregas realizadas" pasa a "Integrantes que la realizaron"; PDF y pantalla siguen en "Realizadas". | Base `sgec_e3_tmp`, servidor real. Dos Tareas "para todos" en BD2026 con nota grupal 9 al Equipo 1: `entrega_por_equipo` TRUE (3 entregas) y FALSE (1 entrega, 2 integrantes calificados sin entrega). Captura de `GET /entregas/actividad/:id`, `GET /reportes` y el Excel antes y después: idénticas (la API no cambió). En el navegador la Bandeja da "3 de 6 actividades realizadas · 3 calificadas · 3 pendientes" en las dos actividades, igual que el reporte (3 de 3 y 0 de 3); con FALSE, los dos integrantes sin entrega salen "Calificada" + "Sin archivo" + "Sin entregar". | Ninguno |
+| H2, H4 | `index.css` (≤768 px): `.topbar` con `flex-wrap: wrap`; `.topbar-right` con `flex-wrap`, `justify-content: flex-end`, `max-width: 100%` y `margin-left: auto` (antes `flex-shrink: 0`). Los botones pasan a otra línea, ninguno se oculta. | Iframe de 390 px con datos reales: Lista de Alumnos, Detalle del Equipo, Bandeja, Actividades, Materias, Reportes, Lista de Equipos y Dashboard sin desplazamiento horizontal (`scrollWidth` = `clientWidth`). A 1280 px el topbar de Lista de Alumnos sigue en 56 px. Con 390 px el topbar de Lista de Alumnos crece a 162 px (título, botones y avatar en filas). | Ninguno |
+| H3 | `ListaMaterias.jsx`: el texto de ayuda dice que con las dos reglas cada alumno solo ve las actividades de sus equipos activos y que con la segunda además no puede estar en los dos bloques. | Leído del DOM en el formulario de Nueva materia. | Ninguno |
+| H5 | `MisCalificaciones.jsx`: "Sin equipo asignado" pasa a "Equipo desactivado". | Alumno con el Equipo 1 desactivado: "Mis calificaciones" agrupa sus 4 notas como "Equipo desactivado". | Ninguno |
+| H8 | `MisActividades.jsx`: "Aún no tienes actividades dirigidas a tus equipos." | Mismo alumno: se ve el texto nuevo. | Ninguno |
+| H9 | `entregas.controller.js` (GET de entregas de una actividad, alumno): el 403 dice "No tienes permiso para ver esta actividad", como `GET /actividades/:id`. El POST de entregar conserva "No perteneces…". Mismo código de estado. | Por API con el alumno del equipo desactivado: `GET /entregas/actividad/:id` y `GET /actividades/:id` responden 403 con el mismo texto, en las dos actividades. | Ninguno |
+| H10 | `DetalleEquipo.jsx` y `ListaEquipos.jsx`: el diálogo de desactivar dice "otro equipo" en lugar de "otro equipo de ese tipo". | Solo leído en el código (no se abrió el diálogo). | Ninguno |
+| H6, H7, H11, H12 | No se tocaron: cambian lógica, agregan elementos de interfaz o contratos de la API, o son cosméticos. | — | Ver `LIMITACIONES.md` §16 |
+
+Limitaciones de esta verificación: el "antes" del Excel y del 403 no se capturó con el código
+anterior (el proceso de captura cargó parte del código ya modificado); el texto anterior de esas
+cadenas consta en el diff de git. La consola y la red se empezaron a leer al final, solo en la
+pantalla Mis actividades del alumno (sin errores). No se vio el PDF ni el Excel en una hoja de
+cálculo. Prueba hecha por API y navegador en una sola base de demostración.
+
+Base temporal para borrado manual: **`sgec_e3_tmp`** (el `DROP` está bloqueado). Capturas y scripts,
+en el directorio temporal de la sesión.
+

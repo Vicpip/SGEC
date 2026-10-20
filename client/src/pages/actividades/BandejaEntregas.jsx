@@ -18,9 +18,24 @@ import * as calificacionesService from '../../services/calificaciones.service'
 
 const TIPO_LABEL = { 'En clase': 'En clase', Practica: 'Práctica', Tarea: 'Tarea', Proyecto: 'Proyecto' }
 
-function estatusIntegrante(entrega) {
-  if (!entrega || entrega.estatus === 'Pendiente') return { label: 'Pendiente', variant: 'red' }
-  if (entrega.estatus === 'Calificada') return { label: 'Calificada', variant: 'green' }
+// Una entrega "recibida" es una con estatus distinto de Pendiente. Un integrante cuenta como
+// realizado si entregó o si tiene calificación registrada (misma definición que el reporte,
+// reportes.controller.js); con calificación grupal, quien tiene nota no está pendiente.
+function entregoIntegrante(it) {
+  return !!it.entrega && it.entrega.estatus !== 'Pendiente'
+}
+
+function realizadoIntegrante(it) {
+  return entregoIntegrante(it) || !!it.calificacion
+}
+
+function calificadoIntegrante(it) {
+  return !!it.calificacion || it.entrega?.estatus === 'Calificada'
+}
+
+function estatusIntegrante(it) {
+  if (calificadoIntegrante(it)) return { label: 'Calificada', variant: 'green' }
+  if (!realizadoIntegrante(it)) return { label: 'Pendiente', variant: 'red' }
   return { label: 'En revisión', variant: 'yellow' }
 }
 
@@ -39,10 +54,10 @@ function formatFecha(fecha) {
 
 function estatusEquipo(integrantes) {
   const total = integrantes.length
-  const entregados = integrantes.filter((it) => it.entrega && it.entrega.estatus !== 'Pendiente').length
-  const calificados = integrantes.filter((it) => it.entrega?.estatus === 'Calificada').length
+  const realizados = integrantes.filter(realizadoIntegrante).length
+  const calificados = integrantes.filter(calificadoIntegrante).length
   if (calificados === total) return { label: 'Calificado', variant: 'green' }
-  if (entregados === 0) return { label: 'Pendiente', variant: 'red' }
+  if (realizados === 0) return { label: 'Pendiente', variant: 'red' }
   return { label: 'En revisión', variant: 'yellow' }
 }
 
@@ -156,7 +171,7 @@ export default function BandejaEntregas() {
         integrantes: eq.integrantes.filter((it) => {
           if (q && !nombreCompleto(it).toLowerCase().includes(q) && !it.boleta.includes(q)) return false
           if (filtroEstatus) {
-            const { label } = estatusIntegrante(it.entrega)
+            const { label } = estatusIntegrante(it)
             if (label !== filtroEstatus) return false
           }
           return true
@@ -193,14 +208,9 @@ export default function BandejaEntregas() {
 
   const { actividad, equipos } = datos
   const totalIntegrantes = equipos.reduce((sum, eq) => sum + eq.integrantes.length, 0)
-  const totalEntregados = equipos.reduce(
-    (sum, eq) => sum + eq.integrantes.filter((it) => it.entrega && it.entrega.estatus !== 'Pendiente').length,
-    0
-  )
-  const totalCalificados = equipos.reduce(
-    (sum, eq) => sum + eq.integrantes.filter((it) => it.entrega?.estatus === 'Calificada').length,
-    0
-  )
+  const totalEntregados = equipos.reduce((sum, eq) => sum + eq.integrantes.filter(entregoIntegrante).length, 0)
+  const totalRealizados = equipos.reduce((sum, eq) => sum + eq.integrantes.filter(realizadoIntegrante).length, 0)
+  const totalCalificados = equipos.reduce((sum, eq) => sum + eq.integrantes.filter(calificadoIntegrante).length, 0)
 
   return (
     <PageWrapper
@@ -296,7 +306,7 @@ export default function BandejaEntregas() {
         equiposFiltrados.map((equipo) => {
           const expandido = expandidos.has(equipo.id_equipo)
           const estatus = estatusEquipo(equipo.integrantes)
-          const entregadas = equipo.integrantes.filter((it) => it.entrega && it.entrega.estatus !== 'Pendiente').length
+          const realizadas = equipo.integrantes.filter(realizadoIntegrante).length
 
           return (
             <div key={equipo.id_equipo} className="card mb16">
@@ -305,7 +315,7 @@ export default function BandejaEntregas() {
                 <Badge variant="blue">{equipo.nombre}</Badge>
                 <span style={{ fontSize: 12.5, color: 'var(--gray-600)' }}>{equipo.integrantes.length} integrantes</span>
                 <span style={{ fontSize: 12.5, color: 'var(--gray-600)' }}>
-                  {entregadas}/{equipo.integrantes.length} entregadas
+                  {realizadas}/{equipo.integrantes.length} realizadas
                 </span>
                 <div style={{ marginLeft: 'auto' }}>
                   <Badge variant={estatus.variant}>{estatus.label}</Badge>
@@ -358,7 +368,7 @@ export default function BandejaEntregas() {
                   </div>
 
                   {equipo.integrantes.map((it) => {
-                    const est = estatusIntegrante(it.entrega)
+                    const est = estatusIntegrante(it)
                     return (
                       <div key={it.id_alumno} className="entrega-card">
                         <div
@@ -380,6 +390,7 @@ export default function BandejaEntregas() {
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                             <Badge variant={est.variant}>{est.label}</Badge>
+                            {!entregoIntegrante(it) && it.calificacion && <Badge variant="gray">Sin archivo</Badge>}
                             <span style={{ fontSize: 12, color: it.entrega ? 'var(--gray-600)' : 'var(--gray-400)' }}>
                               {formatFecha(it.entrega?.fecha_entrega) ?? 'Sin entregar'}
                             </span>
@@ -508,7 +519,7 @@ export default function BandejaEntregas() {
         style={{ padding: '12px 20px', background: 'var(--blue-light)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
       >
         <span style={{ fontSize: 12, color: 'var(--gray-600)' }}>
-          {totalEntregados} de {totalIntegrantes} entregas recibidas · {totalCalificados} calificadas · {totalIntegrantes - totalEntregados} pendientes
+          {totalRealizados} de {totalIntegrantes} actividades realizadas · {totalCalificados} calificadas · {totalIntegrantes - totalRealizados} pendientes
         </span>
       </div>
     </PageWrapper>

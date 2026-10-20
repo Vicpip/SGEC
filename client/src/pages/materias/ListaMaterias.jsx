@@ -310,9 +310,10 @@ function MateriaForm({ inicial, semestres, profesores, esAdmin, onCancel, onSave
                     ))}
                   </select>
                   <p className="text-xs" style={{ marginTop: 6 }}>
-                    En ambos casos Práctica y Tarea son el mismo equipo. Con la segunda opción, quien está en un equipo
-                    de Práctica/Tarea no puede estar en uno de Proyecto, y viceversa; las actividades de Proyecto solo
-                    las ven los alumnos con equipo de Proyecto.
+                    En ambos casos Práctica y Tarea son el mismo equipo, y cada alumno solo ve las actividades de sus
+                    equipos activos: sin equipo de un tipo, no ve las actividades de ese tipo. Con la segunda opción,
+                    además, un alumno no puede estar en los dos bloques (Práctica/Tarea y Proyecto): quien está en uno
+                    no puede estar en el otro.
                   </p>
                 </div>
 

@@ -25,6 +25,7 @@ Resumen:
 | 13 | Dependencias instaladas sin uso | Mantenimiento |
 | 14 | Límites de peticiones en memoria de un solo proceso | Operación |
 | 15 | Correo saliente nunca probado contra un servidor SMTP real | Operación |
+| 16 | Detalles de interfaz de equipos configurables sin corregir (recorrido E1-E12) | Interfaz (rama) |
 
 ## 1. Una clave de materia reutilizada en otro semestre tapa a la anterior
 
@@ -285,3 +286,17 @@ El envío por SMTP (nodemailer) está implementado y es opcional. Se probó sin 
 `EMAIL_DRY_RUN=true` y con un host inválido (el flujo no se rompe ni se cuelga), pero nunca contra
 un buzón real: las credenciales se configuran después en el servidor. Hasta entonces, el acceso
 de los alumnos depende de la contraseña temporal que entrega el profesor.
+
+## 16. Detalles de interfaz de equipos configurables sin corregir
+
+Rama `feature/equipos-configurables`. El recorrido de interfaz (`docs/cierre/E-recorrido.md`)
+encontró hallazgos bajos que cambian lógica o contratos y no se corrigieron en la pasada de
+correcciones de texto y estilo:
+
+- **H6.** Formulario de materias: con valores inválidos el resumen dice "de 5 a 4 integrantes" y el
+  mensaje rojo de configuración sigue visible tras corregir los valores, hasta volver a guardar.
+- **H7.** Crear Equipo: con menos alumnos disponibles que el mínimo (pero más de 0), los botones
+  quedan deshabilitados sin explicación.
+- **H11.** Lista de Materias: la columna "Equipos" cuenta filas de `equipo` (Práctica y Tarea
+  cuentan por separado), por lo que no coincide con Reportes.
+- **H12.** El selector de regla de repetición trunca su texto a 390 px (no desborda la página).
