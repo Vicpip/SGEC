@@ -382,7 +382,10 @@ aplican todas las migraciones que falten, en orden numérico: `docs/DEPLOYMENT.m
 Siguientes etapas (sesiones posteriores): los tipos activos `usa_*` (Etapa 2; hoy solo se guardan)
 y el trabajo individual (Etapa 3).
 
+Correcciones del recorrido de interfaz (`docs/cierre/E-recorrido.md`, sección "Correcciones"): commit `b02c2cf`.
+Pendientes de ese recorrido: `docs/LIMITACIONES.md` §16.
+
 Bases temporales para borrado manual: de E1, `sgec_eq_tmp`, `sgec_eq_sep`, `sgec_eq_parcial`; de
 E2, `sgec_e2_tmp` y `sgec_e2_old`.
 
-Limitaciones conocidas: `docs/LIMITACIONES.md` (15 puntos, con resumen al inicio).
+Limitaciones conocidas: `docs/LIMITACIONES.md` (16 puntos, con resumen al inicio).
