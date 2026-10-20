@@ -386,6 +386,6 @@ Correcciones del recorrido de interfaz (`docs/cierre/E-recorrido.md`, sección "
 Pendientes de ese recorrido: `docs/LIMITACIONES.md` §16.
 
 Bases temporales para borrado manual: de E1, `sgec_eq_tmp`, `sgec_eq_sep`, `sgec_eq_parcial`; de
-E2, `sgec_e2_tmp` y `sgec_e2_old`.
+E2, `sgec_e2_tmp` y `sgec_e2_old`; de las correcciones del recorrido, `sgec_e3_tmp`.
 
 Limitaciones conocidas: `docs/LIMITACIONES.md` (16 puntos, con resumen al inicio).
